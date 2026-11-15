@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Test
+        run: swift test
+
+      - name: Build app
+        run: scripts/build-app.sh
+
+      - name: Render UI snapshots
+        run: |
+          mkdir -p snapshots
+          build/TenFoot.app/Contents/MacOS/TenFoot --render-snapshots "$PWD/snapshots" &
+          pid=$!
+          for _ in $(seq 1 60); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "::warning::Snapshot run did not exit in time"
+            kill "$pid" || true
+          fi
+          ls -la snapshots
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: TenFoot-app
+          path: build/TenFoot.zip
+
+      - name: Upload snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshots
+          path: snapshots/
