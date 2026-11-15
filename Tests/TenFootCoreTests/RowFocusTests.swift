@@ -10,11 +10,14 @@ import Testing
 
     @Test func clampsAtBothEnds() {
         var focus = RowFocus(count: 3, visibleCount: 3)
-        #expect(focus.move(by: -1) == false)
+        let leftAtStart = focus.move(by: -1)
+        #expect(leftAtStart == false)
         #expect(focus.index == 0)
-        #expect(focus.move(by: 1))
-        #expect(focus.move(by: 1))
-        #expect(focus.move(by: 1) == false)
+        let first = focus.move(by: 1)
+        let second = focus.move(by: 1)
+        let pastEnd = focus.move(by: 1)
+        #expect(first && second)
+        #expect(pastEnd == false)
         #expect(focus.index == 2)
     }
 
@@ -41,7 +44,8 @@ import Testing
 
     @Test func emptyRowIgnoresMoves() {
         var focus = RowFocus(count: 0)
-        #expect(focus.move(by: 1) == false)
+        let moved = focus.move(by: 1)
+        #expect(moved == false)
         #expect(focus.index == 0)
     }
 }
