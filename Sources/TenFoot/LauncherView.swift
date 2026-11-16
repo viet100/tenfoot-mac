@@ -79,10 +79,26 @@ private struct HomeScreen: View {
                 EmptyLibrary(unit: unit)
                     .position(x: layout.size.width / 2, y: unit * Theme.rowCenterY)
             } else {
-                TileRow(state: state, layout: layout, dragging: dragging)
+                TileRow(state: state, layout: layout)
                     .offset(x: layout.rowOrigin(scrollIndex: state.scrollIndex),
                             y: unit * Theme.rowCenterY - layout.cell / 2)
                     .frame(width: layout.size.width, height: layout.size.height, alignment: .topLeading)
+            }
+
+            // Presses on the row: an invisible strip across the screen that never moves, so
+            // where you press is always where the tiles are drawn. One gesture handles both
+            // clicking and dragging: let go without moving and it's a click; move a few points
+            // and the game under the pointer is picked up.
+            if !state.games.isEmpty {
+                Color.clear
+                    .frame(width: layout.size.width, height: layout.cell)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
+                            .onChanged { pointerMoved($0) }
+                            .onEnded { pointerReleased($0) }
+                    )
+                    .position(x: layout.size.width / 2, y: unit * Theme.rowCenterY)
             }
 
             SystemRow(state: state, unit: unit)
@@ -92,129 +108,6 @@ private struct HomeScreen: View {
         }
         .frame(width: layout.size.width, height: layout.size.height)
         .coordinateSpace(.named(Self.space))
-    }
-}
-
-extension Layout {
-    /// Left edge of the row's first cell, with the row scrolled to `scrollIndex`.
-    func rowOrigin(scrollIndex: Int) -> CGFloat {
-        margin - rim - CGFloat(scrollIndex) * step
-    }
-
-    /// Centre of the tile in `slot`, in home-screen coordinates.
-    func tileCenter(slot: Int, scrollIndex: Int) -> CGPoint {
-        CGPoint(x: rowOrigin(scrollIndex: scrollIndex) + CGFloat(slot) * step + cell / 2,
-                y: unit * Theme.rowCenterY)
-    }
-
-    /// The slot nearest to a point `x` across the screen.
-    func slot(atX x: CGFloat, scrollIndex: Int) -> Int {
-        Int(((x - rowOrigin(scrollIndex: scrollIndex) - cell / 2) / step).rounded())
-    }
-}
-
-/// Where the see-through copy of a dragged game is. Kept out of `LauncherState`
-/// so following the pointer only redraws the copy, not the whole screen.
-@MainActor @Observable
-final class DragTracker {
-    var location: CGPoint?   // centre of the copy; nil when nothing is dragged
-    var grabOffset = CGSize.zero
-    var lifted = false
-    var landing = false      // let go: gliding into its slot
-}
-
-/// The see-through copy of the dragged game that follows the pointer.
-private struct DragGhost: View {
-    @ObservedObject var state: LauncherState
-    let dragging: DragTracker
-    let layout: Layout
-
-    var body: some View {
-        if let location = dragging.location,
-           let drag = state.drag,
-           let game = state.games.first(where: { $0.id == drag.id }) {
-            TileView(game: game, tile: layout.tile, unit: layout.unit, running: game.id == state.runningGameID)
-                .scaleEffect(dragging.lifted ? Theme.dragLiftScale : 1)
-                .opacity(dragging.lifted ? Theme.dragGhostOpacity : 1)
-                .shadow(color: .black.opacity(dragging.lifted ? 0.45 : 0),
-                        radius: layout.unit * 0.03, y: layout.unit * 0.015)
-                .position(location)
-                .allowsHitTesting(false)
-        }
-    }
-}
-
-/// The tiles, the glass selector and the title, laid out in one coordinate space.
-///
-/// Every tile and the selector are placed with the same formula
-/// (cell `i` starts at `i × step`), so the selector is always exactly centred
-/// on the focused tile, and it moves with the row when the carousel scrolls.
-private struct TileRow: View {
-    @ObservedObject var state: LauncherState
-    let layout: Layout
-    let dragging: DragTracker
-
-    var body: some View {
-        let unit = layout.unit
-        let rim = layout.rim
-        let radius = layout.tile * Theme.tileCornerRadius
-        let selectorShape = RoundedRectangle(cornerRadius: radius + rim, style: .continuous)
-        let tint = (state.backdropGame?.primary ?? .white).opacity(Theme.selectorTint)
-        let focusX = CGFloat(state.selectorIndex) * layout.step
-        let rowFocused = state.area == .games || state.drag != nil
-
-        ZStack(alignment: .topLeading) {
-            // The selector: one piece of glass that slides behind the tiles.
-            Color.clear
-                .frame(width: layout.cell, height: layout.cell)
-                .glassEffect(.regular.tint(tint), in: selectorShape)
-                .offset(x: focusX)
-                .opacity(rowFocused ? 1 : 0)
-                .allowsHitTesting(false)
-
-            ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
-                let launching = state.launchingGameID == game.id
-                TileView(game: game, tile: layout.tile, unit: unit, running: game.id == state.runningGameID,
-                         launching: launching)
-                    // A quick squeeze and spring back when the game is pressed.
-                    .keyframeAnimator(initialValue: CGFloat(1),
-                                      trigger: state.presses[game.id] ?? 0) { view, scale in
-                        view.scaleEffect(scale)
-                    } keyframes: { _ in
-                        KeyframeTrack(\.self) {
-                            CubicKeyframe(Theme.pressScale, duration: Theme.pressDownDuration)
-                            SpringKeyframe(1, duration: Theme.pressReleaseDuration, spring: .bouncy)
-                        }
-                    }
-                    // While a game starts, the others step back.
-                    .opacity(state.launchingGameID != nil && !launching ? Theme.launchOthersOpacity : 1)
-                    // The dragged game's own tile waits, invisible, in the slot it will drop into.
-                    .opacity(state.drag?.id == game.id ? 0 : 1)
-                    .frame(width: layout.cell, height: layout.cell)
-                    .contentShape(selectorShape.inset(by: rim)) // the tile is what you can click, not the rim
-                    .offset(x: CGFloat(state.slot(of: index)) * layout.step)
-            }
-
-            // The title travels with the selector.
-            Text(state.focusedGame?.title ?? "")
-                .font(.system(size: unit * Theme.titleSize, weight: .semibold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
-                .lineLimit(1)
-                .fixedSize()
-                .contentTransition(.identity) // swap the name instantly; a cross-fade leaves the old name behind
-                .offset(x: focusX + rim, y: rim - unit * Theme.titleGap)
-                .allowsHitTesting(false)
-        }
-        .frame(width: CGFloat(max(state.games.count - 1, 0)) * layout.step + layout.cell,
-               height: layout.cell, alignment: .topLeading)
-        // One gesture for both clicking and dragging, so the two never compete for a press:
-        // let go without moving and it's a click; move a few points and the game is picked up.
-        .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .named(HomeScreen.space))
-                .onChanged { pointerMoved($0) }
-                .onEnded { pointerReleased($0) }
-        )
     }
 
     /// The game whose tile is under `point` (home-screen coordinates), if any.
@@ -289,6 +182,121 @@ private struct TileRow: View {
             dragging.location = nil
             dragging.landing = false
         }
+    }
+}
+
+extension Layout {
+    /// Left edge of the row's first cell, with the row scrolled to `scrollIndex`.
+    func rowOrigin(scrollIndex: Int) -> CGFloat {
+        margin - rim - CGFloat(scrollIndex) * step
+    }
+
+    /// Centre of the tile in `slot`, in home-screen coordinates.
+    func tileCenter(slot: Int, scrollIndex: Int) -> CGPoint {
+        CGPoint(x: rowOrigin(scrollIndex: scrollIndex) + CGFloat(slot) * step + cell / 2,
+                y: unit * Theme.rowCenterY)
+    }
+
+    /// The slot nearest to a point `x` across the screen.
+    func slot(atX x: CGFloat, scrollIndex: Int) -> Int {
+        Int(((x - rowOrigin(scrollIndex: scrollIndex) - cell / 2) / step).rounded())
+    }
+}
+
+/// Where the see-through copy of a dragged game is. Kept out of `LauncherState`
+/// so following the pointer only redraws the copy, not the whole screen.
+@MainActor @Observable
+final class DragTracker {
+    var location: CGPoint?   // centre of the copy; nil when nothing is dragged
+    var grabOffset = CGSize.zero
+    var lifted = false
+    var landing = false      // let go: gliding into its slot
+}
+
+/// The see-through copy of the dragged game that follows the pointer.
+private struct DragGhost: View {
+    @ObservedObject var state: LauncherState
+    let dragging: DragTracker
+    let layout: Layout
+
+    var body: some View {
+        if let location = dragging.location,
+           let drag = state.drag,
+           let game = state.games.first(where: { $0.id == drag.id }) {
+            TileView(game: game, tile: layout.tile, unit: layout.unit, running: game.id == state.runningGameID)
+                .scaleEffect(dragging.lifted ? Theme.dragLiftScale : 1)
+                .opacity(dragging.lifted ? Theme.dragGhostOpacity : 1)
+                .shadow(color: .black.opacity(dragging.lifted ? 0.45 : 0),
+                        radius: layout.unit * 0.03, y: layout.unit * 0.015)
+                .position(location)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+/// The tiles, the glass selector and the title, laid out in one coordinate space.
+///
+/// Every tile and the selector are placed with the same formula
+/// (cell `i` starts at `i × step`), so the selector is always exactly centred
+/// on the focused tile, and it moves with the row when the carousel scrolls.
+private struct TileRow: View {
+    @ObservedObject var state: LauncherState
+    let layout: Layout
+
+    var body: some View {
+        let unit = layout.unit
+        let rim = layout.rim
+        let radius = layout.tile * Theme.tileCornerRadius
+        let selectorShape = RoundedRectangle(cornerRadius: radius + rim, style: .continuous)
+        let tint = (state.backdropGame?.primary ?? .white).opacity(Theme.selectorTint)
+        let focusX = CGFloat(state.selectorIndex) * layout.step
+        let rowFocused = state.area == .games || state.drag != nil
+
+        ZStack(alignment: .topLeading) {
+            // The selector: one piece of glass that slides behind the tiles.
+            Color.clear
+                .frame(width: layout.cell, height: layout.cell)
+                .glassEffect(.regular.tint(tint), in: selectorShape)
+                .offset(x: focusX)
+                .opacity(rowFocused ? 1 : 0)
+                .allowsHitTesting(false)
+
+            ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
+                let launching = state.launchingGameID == game.id
+                TileView(game: game, tile: layout.tile, unit: unit, running: game.id == state.runningGameID,
+                         launching: launching)
+                    // A quick squeeze and spring back when the game is pressed.
+                    .keyframeAnimator(initialValue: CGFloat(1),
+                                      trigger: state.presses[game.id] ?? 0) { view, scale in
+                        view.scaleEffect(scale)
+                    } keyframes: { _ in
+                        KeyframeTrack(\.self) {
+                            CubicKeyframe(Theme.pressScale, duration: Theme.pressDownDuration)
+                            SpringKeyframe(1, duration: Theme.pressReleaseDuration, spring: .bouncy)
+                        }
+                    }
+                    // While a game starts, the others step back.
+                    .opacity(state.launchingGameID != nil && !launching ? Theme.launchOthersOpacity : 1)
+                    // The dragged game's own tile waits, invisible, in the slot it will drop into.
+                    .opacity(state.drag?.id == game.id ? 0 : 1)
+                    .frame(width: layout.cell, height: layout.cell)
+                    .contentShape(selectorShape.inset(by: rim)) // the tile is what you can click, not the rim
+                    .offset(x: CGFloat(state.slot(of: index)) * layout.step)
+            }
+
+            // The title travels with the selector.
+            Text(state.focusedGame?.title ?? "")
+                .font(.system(size: unit * Theme.titleSize, weight: .semibold))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
+                .lineLimit(1)
+                .fixedSize()
+                .contentTransition(.identity) // swap the name instantly; a cross-fade leaves the old name behind
+                .offset(x: focusX + rim, y: rim - unit * Theme.titleGap)
+                .allowsHitTesting(false)
+        }
+        .frame(width: CGFloat(max(state.games.count - 1, 0)) * layout.step + layout.cell,
+               height: layout.cell, alignment: .topLeading)
     }
 }
 
