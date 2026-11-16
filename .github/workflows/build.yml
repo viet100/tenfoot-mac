@@ -58,6 +58,18 @@ jobs:
           security set-keychain-settings "$keychain"
           security unlock-keychain -p ci "$keychain"
           echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          # OpenSSL 3 packs .p12 files in a newer format that macOS's `security` can't read
+          # ("MAC verification failed"), so repack it in the older one macOS understands.
+          ossl="$(brew --prefix openssl@3 2>/dev/null)/bin/openssl"
+          [ -x "$ossl" ] || ossl=openssl
+          if ! "$ossl" pkcs12 -in "$RUNNER_TEMP/cert.p12" -passin env:CERT_PASSWORD -nodes -out "$RUNNER_TEMP/cert.pem"; then
+            rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/cert.pem"
+            echo "::error::Couldn't open TENFOOT_CERT_P12 with TENFOOT_CERT_PASSWORD; check the password secret matches the one used to make the .p12"
+            exit 1
+          fi
+          "$ossl" pkcs12 -export -in "$RUNNER_TEMP/cert.pem" -passout env:CERT_PASSWORD \
+            -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 -out "$RUNNER_TEMP/cert.p12"
+          rm "$RUNNER_TEMP/cert.pem"
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
           rm "$RUNNER_TEMP/cert.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain" >/dev/null
