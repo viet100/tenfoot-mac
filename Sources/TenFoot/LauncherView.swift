@@ -449,7 +449,7 @@ private struct ClosePromptView: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: unit * 0.04, style: .continuous)
         ZStack {
-            Color.black.opacity(0.5)
+            Color.black.opacity(Theme.popupDim)
                 .ignoresSafeArea()
                 .onTapGesture { state.choose(.cancel) }
 
@@ -469,9 +469,10 @@ private struct ClosePromptView: View {
                 }
             }
             .foregroundStyle(.white)
+            .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
             .padding(unit * 0.05)
             .frame(width: unit * 0.9)
-            .glassEffect(.regular, in: shape)
+            .glassEffect(.clear, in: shape)
         }
     }
 
@@ -489,7 +490,7 @@ private struct ClosePromptView: View {
             .font(.system(size: unit * Theme.settingsRowSize, weight: .semibold))
             .frame(width: unit * 0.3)
             .padding(.vertical, unit * 0.018)
-            .glassEffect(focused ? Glass.regular.tint(.white.opacity(Theme.focusedGlassTint)) : .regular, in: shape)
+            .glassEffect(focused ? Glass.clear.tint(.white.opacity(Theme.focusedGlassTint)) : .clear, in: shape)
             .overlay(shape.strokeBorder(.white.opacity(focused ? 0.85 : 0), lineWidth: unit * 0.003))
             .contentShape(shape)
             .onTapGesture(perform: action)
@@ -508,9 +509,10 @@ private struct MessageBanner: View {
             .lineLimit(2)
             .frame(maxWidth: unit * 0.9, alignment: .leading)
             .fixedSize(horizontal: true, vertical: false) // as wide as the text (up to the maximum), not the full width
+            .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
             .padding(.horizontal, unit * 0.03)
             .padding(.vertical, unit * 0.016)
-            .glassEffect(.regular, in: Capsule())
+            .glassEffect(.clear, in: Capsule())
             .allowsHitTesting(false)
     }
 }

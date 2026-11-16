@@ -36,6 +36,10 @@ enum Theme {
     static let settingsRowSize: CGFloat = 0.030  // × height
     static let settingsDetailSize: CGFloat = 0.020 // × height
 
+    // Pop-ups (the close prompt and the "Starting…" message)
+    static let popupDim: Double = 0.25           // black over the screen behind the close prompt
+    static let popupTextShadow: Double = 0.35    // keeps text readable on the clear glass
+
     // Hint bar
     static let hintSize: CGFloat = 0.022         // × height
     static let hintMargin: CGFloat = 0.05        // from the screen corner, × height
