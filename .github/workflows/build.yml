@@ -118,6 +118,12 @@ jobs:
             name="$(basename "$png" .png)"
             sips --resampleWidth 1920 -s format jpeg -s formatOptions 85 "$png" --out "docs/snapshots/$name.jpg" >/dev/null
           done
+          # A newer push has its own run, whose screenshots replace these.
+          git fetch origin "${{ github.ref_name }}"
+          if git log --format=%s "$GITHUB_SHA..origin/${{ github.ref_name }}" | grep -vqx "Update UI snapshots"; then
+            echo "Branch has newer commits; leaving the screenshots to their run"
+            exit 0
+          fi
           git add docs/snapshots
           if git diff --cached --quiet; then
             echo "Snapshots unchanged"
@@ -126,7 +132,8 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "Update UI snapshots"
           git fetch origin "${{ github.ref_name }}"
-          if git rebase "origin/${{ github.ref_name }}"; then
+          # Only screenshots can conflict here (an older run's); these are newer, so they win.
+          if git rebase -X theirs "origin/${{ github.ref_name }}"; then
             git push origin "HEAD:${{ github.ref_name }}"
           else
             echo "::warning::Branch moved on; snapshots not committed"

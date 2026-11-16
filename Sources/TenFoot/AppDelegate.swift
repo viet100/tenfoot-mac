@@ -392,6 +392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onAddApp = nil
         state.handle(.confirm)
         await capture("settings-add-app-pressed")
+        print("ADD APP CHECK: row held pressed while the picker is open: \(state.addingApps), on \(state.screen)")
         state.finishAddingApps()
         state.onAddApp = addApp
 
