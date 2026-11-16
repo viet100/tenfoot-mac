@@ -15,16 +15,14 @@ final class HomeState: ObservableObject {
         games.indices.contains(row.index) ? games[row.index] : nil
     }
 
+    // Animations are attached in HomeView, so the selector and the carousel
+    // can each move with their own easing.
     func move(by delta: Int) {
-        var next = row
-        guard next.move(by: delta) else { return }
-        withAnimation(Theme.focusSpring) { row = next }
+        row.move(by: delta)
     }
 
     func select(_ index: Int) {
-        var next = row
-        guard next.select(index) else { return }
-        withAnimation(Theme.focusSpring) { row = next }
+        row.select(index)
     }
 
     func setVisibleCount(_ count: Int) {

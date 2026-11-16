@@ -30,7 +30,7 @@ jobs:
           mkdir -p snapshots
           build/TenFoot.app/Contents/MacOS/TenFoot --render-snapshots "$PWD/snapshots" &
           pid=$!
-          for _ in $(seq 1 60); do
+          for _ in $(seq 1 120); do
             kill -0 "$pid" 2>/dev/null || break
             sleep 1
           done
@@ -39,6 +39,13 @@ jobs:
             kill "$pid" || true
           fi
           ls -la snapshots
+
+      - name: Build animation GIF
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet pillow
+          mkdir -p docs/snapshots
+          .venv/bin/python scripts/make-gif.py snapshots/slide docs/snapshots/home-slide.gif
 
       - name: Upload app
         uses: actions/upload-artifact@v5

@@ -7,75 +7,88 @@ struct HomeView: View {
         GeometryReader { geo in
             let unit = geo.size.height
             let tile = unit * Theme.tileSize
-            let rim = unit * Theme.focusGlassPadding
-            let cell = tile + rim * 2
-            let spacing = unit * Theme.tileSpacing
-            let step = cell + spacing
+            let rim = unit * Theme.selectorRim
+            let cell = tile + rim * 2               // a tile plus the selector rim around it
+            let spacing = unit * Theme.tileSpacing  // gap between tiles
+            let step = cell + spacing               // distance from one tile to the next
             let margin = unit * Theme.sideMargin
 
             ZStack {
                 Backdrop(game: state.focusedGame)
 
-                GlassEffectContainer(spacing: spacing) {
-                    HStack(spacing: spacing) {
-                        ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
-                            TileView(
-                                game: game,
-                                tileSize: tile,
-                                rim: rim,
-                                unit: unit,
-                                isFocused: index == state.row.index
-                            )
-                        }
-                    }
-                    .fixedSize()
-                }
-                .offset(x: margin - rim - CGFloat(state.row.firstVisible) * step,
-                        y: unit * Theme.rowCenterY - cell / 2)
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                TileRow(state: state, unit: unit, tile: tile, rim: rim, cell: cell, step: step)
+                    .offset(x: margin - rim - CGFloat(state.row.firstVisible) * step,
+                            y: unit * Theme.rowCenterY - cell / 2)
+                    .animation(Theme.carouselAnimation, value: state.row.firstVisible)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
 
                 HintBar(unit: unit)
                     .padding(unit * Theme.hintMargin)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
             }
-            .onAppear { updateVisibleCount(width: geo.size.width, margin: margin, step: step, spacing: spacing) }
+            .onAppear { updateVisibleCount(width: geo.size.width, margin: margin, tile: tile, step: step) }
             .onChange(of: geo.size) { _, size in
-                updateVisibleCount(width: size.width, margin: margin, step: step, spacing: spacing)
+                updateVisibleCount(width: size.width, margin: margin, tile: tile, step: step)
             }
         }
         .ignoresSafeArea()
     }
 
-    private func updateVisibleCount(width: CGFloat, margin: CGFloat, step: CGFloat, spacing: CGFloat) {
+    private func updateVisibleCount(width: CGFloat, margin: CGFloat, tile: CGFloat, step: CGFloat) {
         guard step > 0 else { return }
-        let fits = Int((width - margin * 2 + spacing) / step)
+        let fits = Int((width - margin * 2 - tile) / step) + 1
         state.setVisibleCount(max(1, fits))
+    }
+}
+
+/// The tiles plus the glass selector, laid out in one coordinate space.
+///
+/// Every tile and the selector are placed with the same formula
+/// (cell `i` starts at `i × step`), so the selector is always exactly centred
+/// on the focused tile, and it moves with the row when the carousel scrolls.
+private struct TileRow: View {
+    @ObservedObject var state: HomeState
+    let unit: CGFloat
+    let tile: CGFloat
+    let rim: CGFloat
+    let cell: CGFloat
+    let step: CGFloat
+
+    var body: some View {
+        let radius = tile * Theme.tileCornerRadius
+        let selectorShape = RoundedRectangle(cornerRadius: radius + rim, style: .continuous)
+        let tint = (state.focusedGame?.primary ?? .white).opacity(Theme.selectorTint)
+
+        ZStack(alignment: .topLeading) {
+            // The selector: one piece of glass that slides behind the tiles.
+            Color.clear
+                .frame(width: cell, height: cell)
+                .glassEffect(.regular.tint(tint), in: selectorShape)
+                .offset(x: CGFloat(state.row.index) * step)
+                .animation(Theme.selectorAnimation, value: state.row.index)
+
+            ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
+                TileView(game: game, tile: tile, unit: unit, isFocused: index == state.row.index)
+                    .frame(width: cell, height: cell)
+                    .offset(x: CGFloat(index) * step)
+            }
+        }
+        .frame(width: CGFloat(max(state.games.count - 1, 0)) * step + cell, height: cell, alignment: .topLeading)
     }
 }
 
 private struct TileView: View {
     let game: SampleGame
-    let tileSize: CGFloat
-    let rim: CGFloat
+    let tile: CGFloat
     let unit: CGFloat
     let isFocused: Bool
 
     var body: some View {
-        let radius = tileSize * Theme.tileCornerRadius
-        let tileShape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        let rimShape = RoundedRectangle(cornerRadius: radius + rim, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: tile * Theme.tileCornerRadius, style: .continuous)
 
-        GameArt(game: game, size: tileSize)
-            .clipShape(tileShape)
-            .overlay(tileShape.strokeBorder(.white.opacity(isFocused ? 0.45 : 0.12), lineWidth: max(1, unit * 0.0015)))
-            .shadow(color: .black.opacity(isFocused ? 0.45 : 0.25),
-                    radius: isFocused ? unit * 0.03 : unit * 0.012,
-                    y: isFocused ? unit * 0.015 : unit * 0.006)
-            .padding(rim)
-            // Glass sits behind the art (its content); unfocused tiles get no glass.
-            .glassEffect(isFocused ? .regular.tint(game.primary.opacity(Theme.focusGlassTint)) : .identity,
-                         in: rimShape)
-            .scaleEffect(isFocused ? Theme.focusScale : 1)
+        GameArt(game: game, size: tile)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(.white.opacity(0.12), lineWidth: max(1, unit * 0.0015)))
             .overlay(alignment: .topLeading) {
                 if isFocused {
                     Text(game.title)
@@ -84,12 +97,11 @@ private struct TileView: View {
                         .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
                         .lineLimit(1)
                         .fixedSize()
-                        .padding(.leading, rim)
                         .offset(y: -unit * Theme.titleGap)
                         .transition(.opacity)
                 }
             }
-            .zIndex(isFocused ? 1 : 0)
+            .animation(Theme.titleAnimation, value: isFocused)
     }
 }
 

@@ -96,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? await Task.sleep(for: .seconds(2))
 
+        // Stills: the selector resting on a tile.
         let shots: [(name: String, focus: Int)] = [
             ("home-first-tile", 0),
             ("home-third-tile", 2),
@@ -104,17 +105,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for shot in shots {
             state.select(shot.focus)
             try? await Task.sleep(for: .seconds(1.2))
-            captureWindow(window, to: directory.appendingPathComponent("\(shot.name).png"))
+            Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("\(shot.name).png"))
             captureViewCache(window.contentView, to: directory.appendingPathComponent("\(shot.name)-viewcache.png"))
         }
+
+        await recordSlide(of: window, to: directory.appendingPathComponent("slide", isDirectory: true))
         NSApp.terminate(nil)
     }
 
+    /// Records the selector sliding right across the row (and the row scrolling) as numbered
+    /// frames plus a manifest of capture times. Motion is slowed down so the window can be
+    /// captured often enough; CI turns the frames back into a real-speed GIF.
+    private func recordSlide(of window: NSWindow, to directory: URL) async {
+        let slowdown = 10.0
+        let moveInterval = 0.15 // seconds between moves at real speed, like holding a direction
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        state.select(0)
+        try? await Task.sleep(for: .seconds(1.5))
+        Theme.motionScale = slowdown
+
+        let windowNumber = window.windowNumber
+        let recorder = Task.detached(priority: .userInitiated) { () -> [String] in
+            var lines: [String] = []
+            var frame = 0
+            let start = Date()
+            while !Task.isCancelled {
+                let name = String(format: "frame-%04d.png", frame)
+                let time = Date().timeIntervalSince(start)
+                Self.captureWindow(windowNumber, to: directory.appendingPathComponent(name))
+                lines.append("\(name)\t\(time)")
+                frame += 1
+            }
+            return lines
+        }
+
+        try? await Task.sleep(for: .seconds(1))
+        for _ in 0..<7 {
+            state.move(by: 1)
+            try? await Task.sleep(for: .seconds(moveInterval * slowdown))
+        }
+        try? await Task.sleep(for: .seconds(3.5))
+
+        recorder.cancel()
+        let lines = await recorder.value
+        let manifest = "slowdown\t\(slowdown)\n" + lines.joined(separator: "\n") + "\n"
+        try? manifest.write(to: directory.appendingPathComponent("frames.tsv"), atomically: true, encoding: .utf8)
+        Theme.motionScale = 1
+    }
+
     /// Window-server capture: the only way to get Liquid Glass composited as it appears on screen.
-    private func captureWindow(_ window: NSWindow, to url: URL) {
+    nonisolated private static func captureWindow(_ windowNumber: Int, to url: URL) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-x", "-o", "-l", String(window.windowNumber), url.path]
+        process.arguments = ["-x", "-o", "-l", String(windowNumber), url.path]
         do {
             try process.run()
             process.waitUntilExit()

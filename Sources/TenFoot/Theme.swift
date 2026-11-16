@@ -12,23 +12,25 @@ enum Theme {
     static let rowCenterY: CGFloat = 0.50        // vertical centre of the row, × height
     static let sideMargin: CGFloat = 0.10        // left edge of the first tile, × height
 
-    // Focus
-    static let focusScale: CGFloat = 1.08
-    static let focusGlassPadding: CGFloat = 0.016 // glass rim around the focused tile, × height
-    static let focusGlassTint: Double = 0.25      // how much of the game's colour tints the glass rim
+    // Selector (the glass that slides behind the focused tile)
+    static let selectorRim: CGFloat = 0.016      // glass visible around the tile, × height
+    static let selectorTint: Double = 0.25       // how much of the game's colour tints the glass
 
     // Title of the focused game
-    static let titleSize: CGFloat = 0.040         // × height
-    static let titleGap: CGFloat = 0.075          // from tile top to title baseline area, × height
+    static let titleSize: CGFloat = 0.040        // × height
+    static let titleGap: CGFloat = 0.075         // from tile top to title, × height
 
     // Hint bar
-    static let hintSize: CGFloat = 0.022          // × height
-    static let hintMargin: CGFloat = 0.05         // from the screen corner, × height
+    static let hintSize: CGFloat = 0.022         // × height
+    static let hintMargin: CGFloat = 0.05        // from the screen corner, × height
 
     // Backdrop
-    static let backdropDim: Double = 0.35         // black overlay on the colour mesh
+    static let backdropDim: Double = 0.35        // black overlay on the colour mesh
 
-    // Motion
-    static let focusSpring = Animation.spring(response: 0.32, dampingFraction: 0.8)
-    static let backdropAnimation = Animation.easeInOut(duration: 0.6)
+    // Motion. `motionScale` slows everything down (used to record the CI animation GIF).
+    static var motionScale: Double = 1
+    static var selectorAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
+    static var carouselAnimation: Animation { .smooth(duration: 0.18 * motionScale) }
+    static var titleAnimation: Animation { .easeInOut(duration: 0.15 * motionScale) }
+    static var backdropAnimation: Animation { .easeInOut(duration: 0.60 * motionScale) }
 }
