@@ -142,8 +142,7 @@ struct StatusBar: View {
             Image(systemName: batterySymbol(battery))
             BlurText("\(battery.percent)%")
             if battery.pluggedIn {
-                Image(systemName: battery.charging ? "bolt.fill" : "powerplug.fill")
-                    .contentTransition(.symbolEffect(.replace))
+                BlurSymbol(battery.charging ? "bolt.fill" : "powerplug.fill")
                     .transition(.blurReplace)
             }
         }

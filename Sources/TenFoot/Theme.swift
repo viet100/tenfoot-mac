@@ -18,6 +18,9 @@ enum Theme {
     static let selectorRim: CGFloat = 0.016      // glass visible around the tile, × height
     static let selectorTint: Double = 0.25       // how much of the game's colour tints the glass
     static let selectorMagnify: CGFloat = 1.05   // the focused game grows this much under the selector's lens
+    static let selectorStretchPerTile: Double = 0.02 // extra width per tile/second of speed (≈12% at the peak of one move)
+    static let selectorMaxStretch: Double = 0.30     // never more than 30% longer
+    static let selectorSquash: Double = 0.4          // height shrinks 40% as much as the width grows
     static let lensSheen: Double = 0.22          // white frost at the lens's top-left corner
 
     static let focusedGlassTint: Double = 0.22   // white tint on focused buttons and menu rows

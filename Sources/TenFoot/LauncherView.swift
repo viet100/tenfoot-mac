@@ -1,5 +1,7 @@
 import Observation
+import QuartzCore
 import SwiftUI
+import TenFootCore
 
 /// Sizes derived from the window, shared by every screen.
 struct Layout {
@@ -304,10 +306,10 @@ private struct TileRow: View {
 
         ZStack(alignment: .topLeading) {
             // The selector's glass, behind the tiles (glass hides whatever is under it).
+            // It stretches as it moves: the faster, the longer.
             Color.clear
-                .frame(width: layout.cell, height: layout.cell)
                 .glassEffect(.regular.tint(tint), in: selectorShape)
-                .offset(x: focusX)
+                .modifier(FollowSelector(x: focusX, target: focusX, cell: layout.cell, step: layout.step, stretches: true))
                 .opacity(rowFocused ? 1 : 0)
                 .allowsHitTesting(false)
 
@@ -341,23 +343,69 @@ private struct TileRow: View {
             // …and its lens over the focused game: a light frosted sheen and a bright glass
             // edge, with the game magnified a little underneath.
             SelectorLens(shape: selectorShape, rim: rim)
-                .frame(width: layout.cell, height: layout.cell)
-                .offset(x: focusX)
+                .modifier(FollowSelector(x: focusX, target: focusX, cell: layout.cell, step: layout.step, stretches: true))
                 .opacity(rowFocused ? 1 : 0)
                 .allowsHitTesting(false)
 
-            // The title travels with the selector.
+            // The title slides along with the selector, blurring from one name to the next.
             BlurText(state.focusedGame?.title ?? "")
                 .font(.system(size: unit * Theme.titleSize, weight: .semibold))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
                 .lineLimit(1)
                 .fixedSize()
-                .offset(x: focusX + rim, y: rim - unit * Theme.titleGap)
+                .offset(x: rim, y: rim - unit * Theme.titleGap)
+                .modifier(FollowSelector(x: focusX, target: focusX, cell: layout.cell, step: layout.step, stretches: false))
                 .allowsHitTesting(false)
         }
         .frame(width: CGFloat(max(state.games.count - 1, 0)) * layout.step + layout.cell,
                height: layout.cell, alignment: .topLeading)
+    }
+}
+
+/// Moves a view along the row with the selector. SwiftUI hands it every in-between
+/// position of the selector's animation, so it follows the same curve as everything
+/// else. With `stretches`, the view is `cell` square at rest and pulls longer across
+/// (and a little shorter top to bottom) the faster it's moving, centred on the selector.
+private struct FollowSelector: ViewModifier, Animatable {
+    var x: CGFloat        // where the selector is right now, mid-animation
+    let target: CGFloat   // where it's heading
+    let cell: CGFloat
+    let step: CGFloat
+    let stretches: Bool
+    @State private var tracker = SpeedTracker()
+
+    var animatableData: CGFloat {
+        get { x }
+        set { x = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        if stretches {
+            // Slowed-down CI recordings measure slow speeds; `motionScale` puts them back.
+            let tilesPerSecond = tracker.speed(at: x, resting: abs(x - target) < 0.5) / step * Theme.motionScale
+            let scale = SelectorStretch.scale(tilesPerSecond: tilesPerSecond, perTilePerSecond: Theme.selectorStretchPerTile,
+                                              maxStretch: Theme.selectorMaxStretch, squash: Theme.selectorSquash)
+            let width = cell * scale.width, height = cell * scale.height
+            content
+                .frame(width: width, height: height)
+                .offset(x: x - (width - cell) / 2, y: (cell - height) / 2)
+        } else {
+            content.offset(x: x)
+        }
+    }
+}
+
+/// The selector's speed, kept between frames.
+private final class SpeedTracker {
+    private var velocity = VelocityTracker()
+
+    func speed(at x: CGFloat, resting: Bool) -> Double {
+        guard !resting else {
+            velocity.reset()
+            return 0
+        }
+        return velocity.sample(x: Double(x), at: CACurrentMediaTime())
     }
 }
 
@@ -585,6 +633,22 @@ private struct SettingsRow: View {
 }
 
 // MARK: - Shared
+
+/// An SF Symbol that eases from one to the next: the old one blurs out as the new one
+/// blurs in, in the same place.
+struct BlurSymbol: View {
+    let name: String
+    init(_ name: String) { self.name = name }
+
+    var body: some View {
+        ZStack {
+            Image(systemName: name)
+                .id(name)
+                .transition(.blurReplace)
+        }
+        .animation(Theme.textAnimation, value: name)
+    }
+}
 
 /// Text that eases from one string to the next: the old text blurs and fades out while
 /// the new text blurs in, in the same place.
