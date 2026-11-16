@@ -54,6 +54,13 @@ enum Theme {
     static let stickRelease: Float = 0.3    // stick must return below this to release
     static let trackpadStep: CGFloat = 120  // points of trackpad swipe per move
 
+    // Dragging a game to a new place with the mouse
+    static let dragThreshold: CGFloat = 6          // points the pointer moves before a press becomes a drag
+    static let dragLiftScale: CGFloat = 1.06       // the copy under the pointer is a little bigger…
+    static let dragGhostOpacity: Double = 0.75     // …and a little see-through
+    static let dragEdgeZone: CGFloat = 0.10        // pointer this close to the screen edge scrolls the row, × height
+    static let dragScrollInterval: Double = 0.35   // seconds per tile while scrolling at the edge
+
     // Games
     static let closeTimeout: Double = 10    // seconds a game gets to quit before it's stopped outright
 
@@ -66,4 +73,8 @@ enum Theme {
     static var carouselAnimation: Animation { .smooth(duration: 0.18 * motionScale) }
     static var screenAnimation: Animation { .smooth(duration: 0.35 * motionScale) }
     static var backdropAnimation: Animation { .easeInOut(duration: 0.60 * motionScale) }
+    static var reorderAnimation: Animation { .smooth(duration: 0.28 * motionScale) }   // tiles making room
+    static var liftAnimation: Animation { .smooth(duration: 0.18 * motionScale) }      // picking a game up
+    static var dropAnimation: Animation { .smooth(duration: 0.25 * motionScale) }      // settling into its slot
+    static var dragScrollAnimation: Animation { .linear(duration: dragScrollInterval * motionScale) }
 }

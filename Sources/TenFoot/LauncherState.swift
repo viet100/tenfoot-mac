@@ -54,6 +54,13 @@ final class LauncherState: ObservableObject {
     /// The two buttons of the close prompt; left/right moves between them.
     enum PromptButton { case cancel, close }
 
+    /// A game being dragged with the mouse: it started at `from` and is held over `target`.
+    struct Drag: Equatable {
+        let id: UUID
+        let from: Int
+        var target: Int
+    }
+
     @Published private(set) var games: [Game]
     @Published private(set) var screen: Screen = .home
     @Published private(set) var area: HomeArea
@@ -78,6 +85,9 @@ final class LauncherState: ObservableObject {
     @Published private(set) var runningGameID: UUID?
     @Published private(set) var closePrompt: ClosePrompt?
     @Published private(set) var promptFocus: PromptButton = .close
+    @Published private(set) var drag: Drag?
+    private var dragScroll: Task<Void, Never>?
+    private var dragScrollDirection = 0
 
     /// A short message at the bottom of the screen ("Starting…", or an error).
     @Published private(set) var message: String?
@@ -100,12 +110,24 @@ final class LauncherState: ObservableObject {
     /// The game whose colours fill the backdrop (the last focused one, even while
     /// focus is on the buttons below).
     var backdropGame: Game? {
-        games.indices.contains(focusIndex) ? games[focusIndex] : nil
+        if let drag { return games.first { $0.id == drag.id } }
+        return games.indices.contains(focusIndex) ? games[focusIndex] : nil
     }
 
-    /// The focused game, only while focus is on the game row.
+    /// The focused game, only while focus is on the game row (or the game being dragged).
     var focusedGame: Game? {
-        area == .games ? backdropGame : nil
+        area == .games || drag != nil ? backdropGame : nil
+    }
+
+    /// Where the selector sits: the focused game, or the slot a dragged game is held over.
+    var selectorIndex: Int {
+        drag?.target ?? focusIndex
+    }
+
+    /// The slot a game shows in; only differs from `index` while another game is dragged.
+    func slot(of index: Int) -> Int {
+        guard let drag else { return index }
+        return Reorder.slot(of: index, movingFrom: drag.from, to: drag.target)
     }
 
     var runningGame: Game? {
@@ -128,6 +150,7 @@ final class LauncherState: ObservableObject {
     // MARK: - Input
 
     func handle(_ action: InputAction) {
+        guard drag == nil else { return } // the mouse is moving a game
         if closePrompt != nil {
             handlePrompt(action)
             return
@@ -256,7 +279,7 @@ final class LauncherState: ObservableObject {
     /// Clicking a game focuses it; clicking the focused game starts it.
     func click(game index: Int) {
         guard screen == .home, games.indices.contains(index) else { return }
-        guard closePrompt == nil else { return }
+        guard closePrompt == nil, drag == nil else { return }
         if area == .games && index == focusIndex {
             start(games[index])
             return
@@ -299,7 +322,7 @@ final class LauncherState: ObservableObject {
     /// Scroll wheel or trackpad swipe: along the game row on the home screen,
     /// up and down the list in Settings. Positive is right/down.
     func scroll(by steps: Int) {
-        guard steps != 0, closePrompt == nil else { return }
+        guard steps != 0, closePrompt == nil, drag == nil else { return }
         switch screen {
         case .home:
             guard !games.isEmpty else { return }
@@ -343,6 +366,85 @@ final class LauncherState: ObservableObject {
             withAnimation(Theme.carouselAnimation) { scrollIndex = next.firstVisible }
         }
         withAnimation(Theme.selectorAnimation) { focusIndex = next.index }
+    }
+
+    // MARK: - Drag to reorder
+
+    /// Picks up the game at `index`. Returns false if it can't be moved right now.
+    func beginDrag(_ index: Int) -> Bool {
+        guard drag == nil, screen == .home, closePrompt == nil, games.indices.contains(index) else { return false }
+        withAnimation(Theme.selectorAnimation) {
+            drag = Drag(id: games[index].id, from: index, target: index)
+            area = .games
+        }
+        return true
+    }
+
+    /// Holds the dragged game over `slot`. Only on-screen slots count; dragging
+    /// to the edge of the screen scrolls the row instead (`setDragEdge`).
+    func moveDrag(to slot: Int) {
+        guard var next = drag else { return }
+        let lastVisible = min(scrollIndex + row.visibleCount, games.count) - 1
+        next.target = min(max(slot, scrollIndex), lastVisible)
+        guard next != drag else { return }
+        withAnimation(Theme.reorderAnimation) { drag = next }
+    }
+
+    /// While the pointer is at the left (-1) or right (1) edge of the screen, the row
+    /// keeps scrolling that way with the dragged game; 0 stops it.
+    func setDragEdge(_ direction: Int) {
+        guard direction != dragScrollDirection else { return }
+        dragScrollDirection = direction
+        dragScroll?.cancel()
+        dragScroll = nil
+        guard direction != 0, drag != nil else { return }
+        dragScroll = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.scrollDrag()
+                try? await Task.sleep(for: .seconds(Theme.dragScrollInterval * Theme.motionScale))
+            }
+        }
+    }
+
+    private func scrollDrag() {
+        guard var next = drag else { return }
+        let lastFirst = max(0, games.count - row.visibleCount)
+        let first = min(max(scrollIndex + dragScrollDirection, 0), lastFirst)
+        guard first != scrollIndex else { return }
+        withAnimation(Theme.dragScrollAnimation) { scrollIndex = first }
+        next.target = dragScrollDirection > 0 ? min(first + row.visibleCount, games.count) - 1 : first
+        withAnimation(Theme.reorderAnimation) { drag = next }
+    }
+
+    /// Drops the dragged game where it's held, saves the new order and focuses it.
+    /// The tiles are already showing the new order, so nothing moves.
+    func endDrag() {
+        setDragEdge(0)
+        guard let drag else { return }
+        library.move(from: drag.from, to: drag.target)
+        if saves {
+            do {
+                try library.save(to: StorageLocation.library)
+            } catch {
+                print("Couldn't save library: \(error)")
+            }
+        }
+        var reordered = games
+        reordered.insert(reordered.remove(at: drag.from), at: drag.target)
+
+        var next = RowFocus(count: reordered.count, visibleCount: row.visibleCount)
+        next.select(drag.target)
+        next.scroll(to: scrollIndex)
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            games = reordered
+            self.drag = nil
+            row = next
+            scrollIndex = next.firstVisible
+            focusIndex = next.index
+        }
     }
 
     // MARK: - Library

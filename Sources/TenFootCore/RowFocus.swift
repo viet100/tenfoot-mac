@@ -39,6 +39,13 @@ public struct RowFocus: Equatable, Sendable {
         scrollIntoView()
     }
 
+    /// Scrolls so `first` is the first visible tile, as far as the row allows,
+    /// while keeping the focused tile on screen.
+    public mutating func scroll(to first: Int) {
+        firstVisible = first
+        scrollIntoView()
+    }
+
     private mutating func scrollIntoView() {
         if index < firstVisible {
             firstVisible = index

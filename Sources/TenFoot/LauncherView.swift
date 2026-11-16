@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 /// Sizes derived from the window, shared by every screen.
@@ -67,6 +68,9 @@ struct LauncherView: View {
 private struct HomeScreen: View {
     @ObservedObject var state: LauncherState
     let layout: Layout
+    @State private var dragging = DragTracker()
+
+    static let space = "home"
 
     var body: some View {
         let unit = layout.unit
@@ -75,16 +79,68 @@ private struct HomeScreen: View {
                 EmptyLibrary(unit: unit)
                     .position(x: layout.size.width / 2, y: unit * Theme.rowCenterY)
             } else {
-                TileRow(state: state, layout: layout)
-                    .offset(x: layout.margin - layout.rim - CGFloat(state.scrollIndex) * layout.step,
+                TileRow(state: state, layout: layout, dragging: dragging)
+                    .offset(x: layout.rowOrigin(scrollIndex: state.scrollIndex),
                             y: unit * Theme.rowCenterY - layout.cell / 2)
                     .frame(width: layout.size.width, height: layout.size.height, alignment: .topLeading)
             }
 
             SystemRow(state: state, unit: unit)
                 .position(x: layout.size.width / 2, y: unit * Theme.systemRowCenterY)
+
+            DragGhost(state: state, dragging: dragging, layout: layout)
         }
         .frame(width: layout.size.width, height: layout.size.height)
+        .coordinateSpace(.named(Self.space))
+    }
+}
+
+extension Layout {
+    /// Left edge of the row's first cell, with the row scrolled to `scrollIndex`.
+    func rowOrigin(scrollIndex: Int) -> CGFloat {
+        margin - rim - CGFloat(scrollIndex) * step
+    }
+
+    /// Centre of the tile in `slot`, in home-screen coordinates.
+    func tileCenter(slot: Int, scrollIndex: Int) -> CGPoint {
+        CGPoint(x: rowOrigin(scrollIndex: scrollIndex) + CGFloat(slot) * step + cell / 2,
+                y: unit * Theme.rowCenterY)
+    }
+
+    /// The slot nearest to a point `x` across the screen.
+    func slot(atX x: CGFloat, scrollIndex: Int) -> Int {
+        Int(((x - rowOrigin(scrollIndex: scrollIndex) - cell / 2) / step).rounded())
+    }
+}
+
+/// Where the see-through copy of a dragged game is. Kept out of `LauncherState`
+/// so following the pointer only redraws the copy, not the whole screen.
+@MainActor @Observable
+final class DragTracker {
+    var location: CGPoint?   // centre of the copy; nil when nothing is dragged
+    var grabOffset = CGSize.zero
+    var lifted = false
+    var landing = false      // let go: gliding into its slot
+}
+
+/// The see-through copy of the dragged game that follows the pointer.
+private struct DragGhost: View {
+    @ObservedObject var state: LauncherState
+    let dragging: DragTracker
+    let layout: Layout
+
+    var body: some View {
+        if let location = dragging.location,
+           let drag = state.drag,
+           let game = state.games.first(where: { $0.id == drag.id }) {
+            TileView(game: game, tile: layout.tile, unit: layout.unit, running: game.id == state.runningGameID)
+                .scaleEffect(dragging.lifted ? Theme.dragLiftScale : 1)
+                .opacity(dragging.lifted ? Theme.dragGhostOpacity : 1)
+                .shadow(color: .black.opacity(dragging.lifted ? 0.45 : 0),
+                        radius: layout.unit * 0.03, y: layout.unit * 0.015)
+                .position(location)
+                .allowsHitTesting(false)
+        }
     }
 }
 
@@ -96,6 +152,7 @@ private struct HomeScreen: View {
 private struct TileRow: View {
     @ObservedObject var state: LauncherState
     let layout: Layout
+    let dragging: DragTracker
 
     var body: some View {
         let unit = layout.unit
@@ -103,8 +160,8 @@ private struct TileRow: View {
         let radius = layout.tile * Theme.tileCornerRadius
         let selectorShape = RoundedRectangle(cornerRadius: radius + rim, style: .continuous)
         let tint = (state.backdropGame?.primary ?? .white).opacity(Theme.selectorTint)
-        let focusX = CGFloat(state.focusIndex) * layout.step
-        let rowFocused = state.area == .games
+        let focusX = CGFloat(state.selectorIndex) * layout.step
+        let rowFocused = state.area == .games || state.drag != nil
 
         ZStack(alignment: .topLeading) {
             // The selector: one piece of glass that slides behind the tiles.
@@ -117,9 +174,18 @@ private struct TileRow: View {
 
             ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
                 TileView(game: game, tile: layout.tile, unit: unit, running: game.id == state.runningGameID)
+                    // The dragged game's own tile waits, invisible, in the slot it will drop into.
+                    .opacity(state.drag?.id == game.id ? 0 : 1)
                     .frame(width: layout.cell, height: layout.cell)
+                    // Still clickable while invisible, so the drag that hid it carries on.
+                    .contentShape(selectorShape.inset(by: rim))
                     .onTapGesture { state.click(game: index) }
-                    .offset(x: CGFloat(index) * layout.step)
+                    .gesture(
+                        DragGesture(minimumDistance: Theme.dragThreshold, coordinateSpace: .named(HomeScreen.space))
+                            .onChanged { dragChanged(index, $0) }
+                            .onEnded { _ in drop() }
+                    )
+                    .offset(x: CGFloat(state.slot(of: index)) * layout.step)
             }
 
             // The title travels with the selector.
@@ -135,6 +201,51 @@ private struct TileRow: View {
         }
         .frame(width: CGFloat(max(state.games.count - 1, 0)) * layout.step + layout.cell,
                height: layout.cell, alignment: .topLeading)
+    }
+
+    /// The pointer moved while holding a game: pick it up the first time, then keep the
+    /// copy under the pointer and the other games making room for it.
+    private func dragChanged(_ index: Int, _ value: DragGesture.Value) {
+        if state.drag == nil {
+            guard !dragging.landing, state.beginDrag(index) else { return }
+            let center = layout.tileCenter(slot: index, scrollIndex: state.scrollIndex)
+            dragging.grabOffset = CGSize(width: center.x - value.startLocation.x,
+                                         height: center.y - value.startLocation.y)
+            dragging.lifted = false
+            dragging.location = center
+            withAnimation(Theme.liftAnimation) { dragging.lifted = true }
+        }
+        guard !dragging.landing else { return }
+
+        let ghost = CGPoint(x: value.location.x + dragging.grabOffset.width,
+                            y: value.location.y + dragging.grabOffset.height)
+        dragging.location = ghost
+
+        let edge = layout.unit * Theme.dragEdgeZone
+        if value.location.x < edge {
+            state.setDragEdge(-1)
+        } else if value.location.x > layout.size.width - edge {
+            state.setDragEdge(1)
+        } else {
+            state.setDragEdge(0)
+            state.moveDrag(to: layout.slot(atX: ghost.x, scrollIndex: state.scrollIndex))
+        }
+    }
+
+    /// Let go: the copy glides into its slot, then the new order is saved.
+    private func drop() {
+        guard let drag = state.drag, !dragging.landing else { return }
+        state.setDragEdge(0)
+        dragging.landing = true
+        let target = layout.tileCenter(slot: drag.target, scrollIndex: state.scrollIndex)
+        withAnimation(Theme.dropAnimation) {
+            dragging.location = target
+            dragging.lifted = false
+        } completion: {
+            state.endDrag()
+            dragging.location = nil
+            dragging.landing = false
+        }
     }
 }
 

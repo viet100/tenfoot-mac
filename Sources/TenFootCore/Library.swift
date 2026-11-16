@@ -33,6 +33,13 @@ public struct Library: Codable, Equatable, Sendable {
         return entry
     }
 
+    /// Moves the entry at `from` so it ends up at index `to`; the others shift along.
+    public mutating func move(from: Int, to: Int) {
+        guard entries.indices.contains(from), entries.indices.contains(to), from != to else { return }
+        let entry = entries.remove(at: from)
+        entries.insert(entry, at: to)
+    }
+
     /// Loads the library from `url`; a missing file is an empty library.
     public static func load(from url: URL) throws -> Library {
         guard FileManager.default.fileExists(atPath: url.path) else { return Library() }

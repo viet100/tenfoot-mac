@@ -293,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.handle(.up)
 
         await recordSlide(of: window, to: directory.appendingPathComponent("slide", isDirectory: true))
+        await checkDragToReorder(window: window, directory: directory)
         await checkLaunchAndReturn(window: window, directory: directory)
         NSApp.terminate(nil)
     }
@@ -307,6 +308,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         state.select(0)
         try? await Task.sleep(for: .seconds(1.5))
+        await record(window, to: directory, slowdown: slowdown) {
+            for _ in 0..<7 {
+                self.state.handle(.right)
+                try? await Task.sleep(for: .seconds(moveInterval * slowdown))
+            }
+        }
+    }
+
+    /// Captures the window as fast as it can while `actions` run with every animation
+    /// slowed down `slowdown` times, then writes the manifest `make-gif.py` reads.
+    private func record(_ window: NSWindow, to directory: URL, slowdown: Double,
+                        actions: () async -> Void) async {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         Theme.motionScale = slowdown
 
         let windowNumber = window.windowNumber
@@ -325,10 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         try? await Task.sleep(for: .seconds(1))
-        for _ in 0..<7 {
-            state.handle(.right)
-            try? await Task.sleep(for: .seconds(moveInterval * slowdown))
-        }
+        await actions()
         try? await Task.sleep(for: .seconds(3.5))
 
         recorder.cancel()
@@ -336,6 +347,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let manifest = "slowdown\t\(slowdown)\n" + lines.joined(separator: "\n") + "\n"
         try? manifest.write(to: directory.appendingPathComponent("frames.tsv"), atomically: true, encoding: .utf8)
         Theme.motionScale = 1
+    }
+
+    /// Drags games along the row with real mouse events sent to the window: stills of a
+    /// game mid-drag and after the drop, then a GIF of two drags (the second one held at
+    /// the right edge so the row scrolls). Logged as "DRAG CHECK: …".
+    private func checkDragToReorder(window: NSWindow, directory: URL) async {
+        guard let size = window.contentView?.bounds.size else { return }
+        let layout = Layout(size: size)
+        func titles() -> String { state.games.map(\.title).joined(separator: ", ") }
+        func center(_ slot: Int) -> CGPoint { layout.tileCenter(slot: slot, scrollIndex: state.scrollIndex) }
+
+        state.select(0)
+        try? await Task.sleep(for: .seconds(1))
+        print("DRAG CHECK: before: \(titles())")
+
+        // Stills: the second game picked up and held over the fourth slot.
+        let moved = state.games[1].title
+        let hold = center(3).moved(30, -25)
+        sendMouse(.leftMouseDown, at: center(1), in: window)
+        await dragMouse(from: center(1), to: hold, seconds: 0.5, in: window)
+        try? await Task.sleep(for: .seconds(1))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-drag.png"))
+        sendMouse(.leftMouseUp, at: hold, in: window)
+        try? await Task.sleep(for: .seconds(1))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-dropped.png"))
+        let landed = state.games.firstIndex { $0.title == moved }
+        print("DRAG CHECK: after dropping \(moved) on slot 3: \(titles()); "
+              + (landed == 3 && state.drag == nil ? "PASSED" : "FAILED, it's at \(landed.map(String.init) ?? "nowhere")"))
+
+        // GIF: drag the first game two places right; then take the third one to the right
+        // edge and hold it there while the row scrolls.
+        let slowdown = 6.0
+        await record(window, to: directory.appendingPathComponent("drag", isDirectory: true), slowdown: slowdown) {
+            let start = center(0), end = center(2).moved(-20, -20)
+            self.sendMouse(.leftMouseDown, at: start, in: window)
+            await self.dragMouse(from: start, to: end, seconds: 0.7 * slowdown, in: window)
+            try? await Task.sleep(for: .seconds(0.4 * slowdown))
+            self.sendMouse(.leftMouseUp, at: end, in: window)
+            try? await Task.sleep(for: .seconds(0.8 * slowdown))
+
+            let grab = center(2), edge = CGPoint(x: size.width - 30, y: grab.y - 20)
+            self.sendMouse(.leftMouseDown, at: grab, in: window)
+            await self.dragMouse(from: grab, to: edge, seconds: 0.6 * slowdown, in: window)
+            try? await Task.sleep(for: .seconds(1.2 * slowdown))
+            let back = edge.moved(-layout.step * 1.2, 0)
+            await self.dragMouse(from: edge, to: back, seconds: 0.3 * slowdown, in: window)
+            try? await Task.sleep(for: .seconds(0.3 * slowdown))
+            self.sendMouse(.leftMouseUp, at: back, in: window)
+        }
+        print("DRAG CHECK: after the GIF drags: \(titles()); first visible: \(state.scrollIndex); "
+              + "dragging: \(state.drag != nil)")
+    }
+
+    /// Sends a mouse event to the window at `point` (top-left origin, like SwiftUI).
+    private func sendMouse(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow) {
+        let height = window.contentView?.bounds.height ?? 0
+        guard let event = NSEvent.mouseEvent(
+            with: type, location: NSPoint(x: point.x, y: height - point.y), modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+            eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1
+        ) else { return }
+        window.sendEvent(event)
+    }
+
+    /// Moves a held mouse button from `start` to `end` over `seconds`, easing in and out.
+    private func dragMouse(from start: CGPoint, to end: CGPoint, seconds: Double, in window: NSWindow) async {
+        let steps = max(1, Int(seconds * 60))
+        for step in 1...steps {
+            let t = Double(step) / Double(steps)
+            let eased = t * t * (3 - 2 * t)
+            let point = CGPoint(x: start.x + (end.x - start.x) * eased, y: start.y + (end.y - start.y) * eased)
+            sendMouse(.leftMouseDragged, at: point, in: window)
+            try? await Task.sleep(for: .seconds(seconds / Double(steps)))
+        }
     }
 
     /// Opens Calculator from the row, quits it, and checks TenFoot comes back to the
@@ -458,4 +543,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         view.cacheDisplay(in: view.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
     }
+}
+
+private extension CGPoint {
+    func moved(_ dx: CGFloat, _ dy: CGFloat) -> CGPoint { CGPoint(x: x + dx, y: y + dy) }
 }

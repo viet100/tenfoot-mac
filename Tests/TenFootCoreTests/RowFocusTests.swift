@@ -48,4 +48,15 @@ import Testing
         #expect(moved == false)
         #expect(focus.index == 0)
     }
+
+    @Test func scrollsToAGivenFirstTileButKeepsFocusVisible() {
+        var focus = RowFocus(count: 10, visibleCount: 4)
+        focus.select(5)
+        focus.scroll(to: 3)
+        #expect(focus.firstVisible == 3)
+        focus.scroll(to: 0) // would hide the focused tile 5
+        #expect(focus.firstVisible == 2)
+        focus.scroll(to: 9) // past the end of the row
+        #expect(focus.firstVisible == 5)
+    }
 }

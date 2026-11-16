@@ -18,6 +18,17 @@ import Testing
         #expect(again.id == first.id)
     }
 
+    @Test func movesEntriesBothWays() {
+        var library = Library()
+        for name in ["A", "B", "C", "D"] { library.add(path: "/Applications/\(name).app", title: name) }
+        library.move(from: 0, to: 2)
+        #expect(library.entries.map(\.title) == ["B", "C", "A", "D"])
+        library.move(from: 3, to: 0)
+        #expect(library.entries.map(\.title) == ["D", "B", "C", "A"])
+        library.move(from: 1, to: 9) // out of range: no change
+        #expect(library.entries.map(\.title) == ["D", "B", "C", "A"])
+    }
+
     @Test func savesAndLoads() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
