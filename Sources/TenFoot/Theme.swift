@@ -37,7 +37,8 @@ enum Theme {
     static let settingsDetailSize: CGFloat = 0.020 // × height
 
     // Pop-ups (the close prompt and the "Starting…" message)
-    static let popupDim: Double = 0.25           // black over the screen behind the close prompt
+    static let popupDim: Double = 0.35           // black over the screen behind the close prompt
+    static let popupTint: Double = 0.30          // black tint in the pop-up glass, so white text reads clearly
     static let popupTextShadow: Double = 0.35    // keeps text readable on the clear glass
 
     // Hint bar

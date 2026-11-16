@@ -553,7 +553,7 @@ private struct ClosePromptView: View {
             .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
             .padding(unit * 0.05)
             .frame(width: unit * 0.9)
-            .glassEffect(.clear, in: shape)
+            .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
         }
     }
 
@@ -571,7 +571,8 @@ private struct ClosePromptView: View {
             .font(.system(size: unit * Theme.settingsRowSize, weight: .semibold))
             .frame(width: unit * 0.3)
             .padding(.vertical, unit * 0.018)
-            .glassEffect(focused ? Glass.clear.tint(.white.opacity(Theme.focusedGlassTint)) : .clear, in: shape)
+            .glassEffect(focused ? Glass.clear.tint(.white.opacity(Theme.focusedGlassTint))
+                                 : Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
             .overlay(shape.strokeBorder(.white.opacity(focused ? 0.85 : 0), lineWidth: unit * 0.003))
             .contentShape(shape)
             .onTapGesture(perform: action)
@@ -593,7 +594,7 @@ private struct MessageBanner: View {
             .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
             .padding(.horizontal, unit * 0.03)
             .padding(.vertical, unit * 0.016)
-            .glassEffect(.clear, in: Capsule())
+            .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: Capsule())
             .allowsHitTesting(false)
     }
 }
