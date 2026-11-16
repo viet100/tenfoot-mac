@@ -38,6 +38,34 @@ import Testing
         #expect(session.isOver(at: 202))
     }
 
+    @Test func aHandOffTakesOnlyOneApp() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)                       // a Steam shortcut
+        session.processQuit(100, at: 1)                 // hands off and quits
+        let game = session.appLaunched(200, isWine: false, at: 3)
+        let other = session.appLaunched(300, isWine: false, at: 4) // something else opening
+        #expect(game)
+        #expect(!other)
+        #expect(session.processes == [200])
+    }
+
+    @Test func aGameQuittingAllowsAnotherHandOff() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)
+        session.appLaunched(200, isWine: false, at: 1)  // launch slot used
+        session.processQuit(200, at: 5)                 // e.g. a game restarting itself
+        let again = session.appLaunched(201, isWine: false, at: 6)
+        #expect(again)
+    }
+
+    @Test func anAppAlreadyTrackedDoesntUseTheHandOff() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)
+        session.appLaunched(100, isWine: false, at: 0)  // the game's own launch notice
+        let next = session.appLaunched(200, isWine: false, at: 1)
+        #expect(next)
+    }
+
     @Test func waitsForWineAfterTheCrossOverLauncherQuits() {
         var session = GameSession(expectsWine: true, at: 0)
         session.track(100, at: 0)       // CrossOver launcher

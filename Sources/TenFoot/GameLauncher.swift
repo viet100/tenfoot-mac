@@ -81,6 +81,15 @@ final class GameLauncher {
         let apps = NSWorkspace.shared.runningApplications
         for app in apps where !knownApps.contains(app.processIdentifier) {
             guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { continue }
+            // The game's own app is always the game, without using up a hand-off.
+            if let game = current, Self.isAppBundle(game.url),
+               app.bundleURL?.standardizedFileURL == game.url.standardizedFileURL {
+                session?.track(app.processIdentifier, at: now)
+                continue
+            }
+            // A store like Steam can start when one of its games is opened, but it isn't
+            // the game: it shouldn't be waited for, or quit when the game is closed.
+            if let id = app.bundleIdentifier, Self.storeLaunchers.contains(id) { continue }
             let isWine = Self.isWine(app)
             // Background helpers and menu bar items only count if they're Wine.
             if isWine || app.activationPolicy == .regular {
@@ -150,6 +159,13 @@ final class GameLauncher {
     }
 
     // MARK: - Helpers
+
+    /// Game stores that open alongside their games (Steam, Epic Games, GOG Galaxy).
+    private static let storeLaunchers: Set<String> = [
+        "com.valvesoftware.steam",
+        "com.epicgames.EpicGamesLauncher",
+        "com.gog.galaxy",
+    ]
 
     private static func isAppBundle(_ url: URL) -> Bool {
         url.pathExtension.lowercased() == "app"

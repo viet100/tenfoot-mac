@@ -5,8 +5,10 @@
 /// may quit straight away; a script may start the real app and exit. So the session
 /// takes in:
 /// - any Wine/CrossOver app that starts while it's running, and
-/// - any other app that starts shortly after the game was launched, or shortly
-///   after one of its processes quit (a hand-off).
+/// - the first other app that starts shortly after the game was launched, or
+///   shortly after one of its processes quit (a hand-off). Only one app is taken
+///   per hand-off, so apps you happen to open around the same time aren't counted
+///   as the game (and aren't quit with it).
 ///
 /// It's over once none of those are running and nothing has taken over for a short
 /// grace period. Times are in seconds.
@@ -31,6 +33,8 @@ public struct GameSession: Sendable {
     private var sawWine = false
     private var trackedAnything = false
     private var lastChange: Double
+    /// Whether a hand-off may still take in an app (one per launch or quit).
+    private var handoffOpen = true
 
     public init(expectsWine: Bool, at now: Double, timing: Timing = Timing()) {
         self.expectsWine = expectsWine
@@ -48,8 +52,13 @@ public struct GameSession: Sendable {
     /// counted as part of the game.
     @discardableResult
     public mutating func appLaunched(_ pid: Int32, isWine: Bool, at now: Double) -> Bool {
-        guard isWine || now - lastChange <= timing.handoffWindow else { return false }
-        if isWine { sawWine = true }
+        if processes.contains(pid) { return true }
+        if isWine {
+            sawWine = true
+        } else {
+            guard handoffOpen, now - lastChange <= timing.handoffWindow else { return false }
+            handoffOpen = false
+        }
         track(pid, at: now)
         return true
     }
@@ -58,6 +67,7 @@ public struct GameSession: Sendable {
     public mutating func processQuit(_ pid: Int32, at now: Double) {
         guard processes.remove(pid) != nil else { return }
         lastChange = now
+        handoffOpen = true
     }
 
     /// True once the game has finished and the launcher should come back.
