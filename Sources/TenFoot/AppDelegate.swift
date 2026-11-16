@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controllers: ControllerManager?
     private var window: LauncherWindow?
     private var keyMonitor: Any?
+    private var scrollMonitor: Any?
+    private var scrollAmount: CGFloat = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
@@ -63,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSCursor.setHiddenUntilMouseMoves(true)
 
         installKeyboardInput()
+        installScrollInput()
 
         if let snapshotDir {
             Task { await renderSnapshots(of: window, to: snapshotDir) }
@@ -119,6 +122,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 default: return event
                 }
                 self.state.handle(action)
+                return nil
+            }
+        }
+    }
+
+    /// Scroll wheel and trackpad swipes move along the game row (or the Settings list).
+    /// A trackpad moves one step per `Theme.trackpadStep` points; a mouse wheel one step
+    /// per notch. Momentum after lifting the fingers is ignored so the row stops where you do.
+    private func installScrollInput() {
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            return MainActor.assumeIsolated {
+                guard event.window === self.window else { return event }
+                guard event.momentumPhase.isEmpty else { return nil }
+                if event.phase == .began { self.scrollAmount = 0 }
+
+                let dx = event.scrollingDeltaX, dy = event.scrollingDeltaY
+                // Content follows the fingers: swiping left (negative delta) reveals games to the right.
+                let delta = -(abs(dx) > abs(dy) ? dx : dy)
+                if event.hasPreciseScrollingDeltas {
+                    self.scrollAmount += delta
+                    let steps = Int(self.scrollAmount / Theme.trackpadStep)
+                    self.scrollAmount -= CGFloat(steps) * Theme.trackpadStep
+                    self.state.scroll(by: steps)
+                } else if delta != 0 {
+                    self.state.scroll(by: delta > 0 ? 1 : -1)
+                }
                 return nil
             }
         }

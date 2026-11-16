@@ -126,6 +126,62 @@ final class LauncherState: ObservableObject {
         }
     }
 
+    // MARK: - Mouse and trackpad
+
+    /// Clicking a game focuses it.
+    func click(game index: Int) {
+        guard screen == .home, games.indices.contains(index) else { return }
+        if area != .games {
+            withAnimation(Theme.selectorAnimation) { area = .games }
+        }
+        var next = row
+        guard next.select(index) else { return }
+        apply(next)
+    }
+
+    /// Clicking a round button opens it.
+    func click(systemButton index: Int) {
+        guard screen == .home, SystemButton.allCases.indices.contains(index) else { return }
+        withAnimation(Theme.selectorAnimation) {
+            area = .system
+            systemIndex = index
+        }
+        open(SystemButton.allCases[index])
+    }
+
+    /// Clicking a Settings item selects it.
+    func click(settingsItem index: Int) {
+        guard screen == .settings, SettingsItem.allCases.indices.contains(index) else { return }
+        settingsIndex = index
+        handleSettings(.confirm)
+    }
+
+    /// Clicking Open/Select or Back in the hint bar does the same as the button.
+    func click(hint: HintKind) {
+        switch hint {
+        case .confirm: handle(.confirm)
+        case .back: handle(.back)
+        case .move: break
+        }
+    }
+
+    /// Scroll wheel or trackpad swipe: along the game row on the home screen,
+    /// up and down the list in Settings. Positive is right/down.
+    func scroll(by steps: Int) {
+        guard steps != 0 else { return }
+        switch screen {
+        case .home:
+            guard !games.isEmpty else { return }
+            if area != .games {
+                withAnimation(Theme.selectorAnimation) { area = .games }
+            }
+            moveGames(by: steps)
+        case .settings:
+            let last = SettingsItem.allCases.count - 1
+            withAnimation(Theme.selectorAnimation) { settingsIndex = min(max(settingsIndex + steps, 0), last) }
+        }
+    }
+
     // MARK: - Game row
 
     /// Focuses a game directly (used for CI snapshots).

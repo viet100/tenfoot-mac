@@ -8,11 +8,11 @@ enum Theme {
     // Tile row
     static let tileSize: CGFloat = 0.30          // tile edge, × height
     static let tileSpacing: CGFloat = 0.03       // gap between tiles, × height
-    static let tileCornerRadius: CGFloat = 0.14  // × tile edge
+    static let tileCornerRadius: CGFloat = 0.225 // × tile edge; matches the rounded shape of macOS app icons
     static let rowCenterY: CGFloat = 0.50        // vertical centre of the row, × height
     static let sideMargin: CGFloat = 0.10        // left edge of the first tile, × height
 
-    static let iconScale: CGFloat = 0.78         // app icon size inside its tile, × tile edge
+    static let iconArtFraction: CGFloat = 0.805  // macOS icons draw their artwork in the middle 80.5% of the image
 
     // Selector (the glass that slides behind the focused tile)
     static let selectorRim: CGFloat = 0.016      // glass visible around the tile, × height
@@ -51,6 +51,7 @@ enum Theme {
     static let repeatInterval: Double = 0.11 // seconds between repeats while held
     static let stickPress: Float = 0.5      // stick deflection that counts as a press
     static let stickRelease: Float = 0.3    // stick must return below this to release
+    static let trackpadStep: CGFloat = 50   // points of trackpad swipe per move
 
     // Backdrop
     static let backdropDim: Double = 0.35        // black overlay on the colour mesh

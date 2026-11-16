@@ -101,10 +101,12 @@ private struct TileRow: View {
                 .glassEffect(.regular.tint(tint), in: selectorShape)
                 .offset(x: focusX)
                 .opacity(rowFocused ? 1 : 0)
+                .allowsHitTesting(false)
 
             ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
                 TileView(game: game, tile: layout.tile, unit: unit)
                     .frame(width: layout.cell, height: layout.cell)
+                    .onTapGesture { state.click(game: index) }
                     .offset(x: CGFloat(index) * layout.step)
             }
 
@@ -117,6 +119,7 @@ private struct TileRow: View {
                 .fixedSize()
                 .contentTransition(.identity) // swap the name instantly; a cross-fade leaves the old name behind
                 .offset(x: focusX + rim, y: rim - unit * Theme.titleGap)
+                .allowsHitTesting(false)
         }
         .frame(width: CGFloat(max(state.games.count - 1, 0)) * layout.step + layout.cell,
                height: layout.cell, alignment: .topLeading)
@@ -130,19 +133,18 @@ private struct TileView: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: tile * Theme.tileCornerRadius, style: .continuous)
+        // macOS icons leave a transparent margin around their artwork; enlarge the
+        // image so the artwork itself fills the tile.
+        let imageSize = tile / Theme.iconArtFraction
 
-        ZStack {
-            LinearGradient(colors: [game.primary, game.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
-            Image(nsImage: game.icon)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: tile * Theme.iconScale, height: tile * Theme.iconScale)
-                .shadow(color: .black.opacity(0.3), radius: tile * 0.03, y: tile * 0.015)
-        }
-        .frame(width: tile, height: tile)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(.white.opacity(0.12), lineWidth: max(1, unit * 0.0015)))
+        Image(nsImage: game.icon)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: imageSize, height: imageSize)
+            .frame(width: tile, height: tile)
+            .clipShape(shape)
+            .contentShape(shape)
     }
 }
 
@@ -187,6 +189,8 @@ private struct SystemRow: View {
                         .foregroundStyle(.white)
                         .opacity(focused ? 1 : 0)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { state.click(systemButton: index) }
             }
         }
     }
@@ -208,6 +212,8 @@ private struct SettingsScreen: View {
             VStack(spacing: unit * 0.014) {
                 ForEach(Array(LauncherState.SettingsItem.allCases.enumerated()), id: \.element) { index, item in
                     SettingsRow(item: item, focused: index == state.settingsIndex, unit: unit)
+                        .contentShape(Rectangle())
+                        .onTapGesture { state.click(settingsItem: index) }
                 }
             }
             .frame(width: unit * Theme.settingsListWidth)
@@ -282,6 +288,8 @@ private struct HintBar: View {
         HStack(spacing: unit * 0.035) {
             ForEach(Array(state.hints.enumerated()), id: \.offset) { _, hint in
                 item(symbol: symbol(for: hint.0), label: hint.1)
+                    .contentShape(Rectangle())
+                    .onTapGesture { state.click(hint: hint.0) }
             }
             item(symbol: "command", label: "Q  Exit")
         }
