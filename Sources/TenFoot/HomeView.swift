@@ -79,7 +79,7 @@ private struct TileRow: View {
                 .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
                 .lineLimit(1)
                 .fixedSize()
-                .contentTransition(.opacity)
+                .contentTransition(.identity) // swap the name instantly; a cross-fade leaves the old name behind
                 .offset(x: focusX + rim, y: rim - unit * Theme.titleGap)
         }
         .frame(width: CGFloat(max(state.games.count - 1, 0)) * step + cell, height: cell, alignment: .topLeading)
