@@ -39,7 +39,10 @@ enum Theme {
     // Pop-ups (the close prompt and the "Starting…" message)
     static let popupDim: Double = 0.35           // black over the screen behind the close prompt
     static let popupTint: Double = 0.30          // black tint in the pop-up glass, so white text reads clearly
-    static let popupTextShadow: Double = 0.35    // keeps text readable on the clear glass
+    /// Frosted glass for pop-up panels: regular glass blurs what's behind it, and the dark
+    /// tint keeps it from looking milky so white text stays easy to read.
+    static var popupGlass: Glass { Glass.regular.tint(.black.opacity(popupTint)) }
+    static let popupTextShadow: Double = 0.35    // keeps text readable on the glass
     static let popupScale: CGFloat = 0.92        // the close prompt grows from this size as it fades in
 
     // Hint bar

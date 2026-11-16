@@ -576,7 +576,7 @@ private struct ClosePromptView: View {
         .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
         .padding(unit * 0.05)
         .frame(width: unit * 0.9)
-        .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
+        .glassEffect(Theme.popupGlass, in: shape)
     }
 
     private var detail: String {
@@ -624,7 +624,7 @@ private struct OptionsMenuView: View {
         .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
         .padding(unit * 0.05)
         .frame(width: unit * 0.9)
-        .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
+        .glassEffect(Theme.popupGlass, in: shape)
     }
 
     private func row(_ item: LauncherState.OptionsItem, focused: Bool, available: Bool) -> some View {
@@ -667,7 +667,7 @@ private struct MessageBanner: View {
             .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
             .padding(.horizontal, unit * 0.03)
             .padding(.vertical, unit * 0.016)
-            .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: Capsule())
+            .glassEffect(Theme.popupGlass, in: Capsule())
             .allowsHitTesting(false)
     }
 }
