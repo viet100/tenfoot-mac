@@ -41,14 +41,18 @@ struct LauncherView: View {
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
 
                 // The dim and the panel fade separately; the panel also eases in from a
-                // little smaller and shrinks a little as it goes.
+                // little smaller and shrinks a little as it goes. The fixed layer order keeps
+                // them in front while they fade out (otherwise they drop behind the backdrop
+                // and vanish at once).
                 if let prompt = state.closePrompt {
                     Color.black.opacity(Theme.popupDim)
                         .ignoresSafeArea()
                         .onTapGesture { state.choose(.cancel) }
                         .transition(.opacity)
+                        .zIndex(10)
                     ClosePromptView(state: state, prompt: prompt, unit: layout.unit)
                         .transition(.scale(scale: Theme.popupScale).combined(with: .opacity))
+                        .zIndex(11)
                 }
 
                 // The message ("Starting…", or an error) sits on its own line above the hints.
@@ -61,6 +65,7 @@ struct LauncherView: View {
                 }
                 .padding(layout.unit * Theme.hintMargin)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
+                .zIndex(12) // above the close prompt's dim, as the hints belong to the prompt too
             }
             .onAppear { state.setVisibleCount(layout.visibleCount) }
             .onChange(of: geo.size) { _, size in state.setVisibleCount(Layout(size: size).visibleCount) }
