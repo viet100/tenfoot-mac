@@ -51,6 +51,9 @@ final class LauncherState: ObservableObject {
         let next: Game?
     }
 
+    /// The two buttons of the close prompt; left/right moves between them.
+    enum PromptButton { case cancel, close }
+
     @Published private(set) var games: [Game]
     @Published private(set) var screen: Screen = .home
     @Published private(set) var area: HomeArea
@@ -74,6 +77,7 @@ final class LauncherState: ObservableObject {
     /// The game that is running (in the background while TenFoot is shown).
     @Published private(set) var runningGameID: UUID?
     @Published private(set) var closePrompt: ClosePrompt?
+    @Published private(set) var promptFocus: PromptButton = .close
 
     /// A short message at the bottom of the screen ("Starting…", or an error).
     @Published private(set) var message: String?
@@ -110,7 +114,7 @@ final class LauncherState: ObservableObject {
 
     var hints: [(HintKind, String)] {
         if closePrompt != nil {
-            return [(.confirm, "Close"), (.back, "Cancel")]
+            return [(.move, "Move"), (.confirm, "Select"), (.back, "Cancel")]
         }
         switch (screen, area) {
         case (.home, .games) where focusedGame != nil && focusedGame?.id == runningGameID:
@@ -147,7 +151,7 @@ final class LauncherState: ObservableObject {
             if let game = focusedGame { start(game) }
         case (.games, .close):
             if let game = focusedGame, game.id == runningGameID {
-                withAnimation(Theme.screenAnimation) { closePrompt = ClosePrompt(running: game, next: nil) }
+                askToClose(game, then: nil)
             }
         case (.games, .down):
             withAnimation(Theme.selectorAnimation) { area = .system }
@@ -184,15 +188,29 @@ final class LauncherState: ObservableObject {
 
     private func handlePrompt(_ action: InputAction) {
         switch action {
+        case .left:
+            withAnimation(Theme.selectorAnimation) { promptFocus = .cancel }
+        case .right:
+            withAnimation(Theme.selectorAnimation) { promptFocus = .close }
         case .confirm:
-            let next = closePrompt?.next
-            withAnimation(Theme.screenAnimation) { closePrompt = nil }
-            onClose?(next)
+            choose(promptFocus)
         case .back, .home:
-            withAnimation(Theme.screenAnimation) { closePrompt = nil }
-        default:
+            choose(.cancel)
+        case .up, .down, .close:
             break
         }
+    }
+
+    /// Picks a button of the close prompt (A on the focused one, or a click).
+    func choose(_ button: PromptButton) {
+        guard let prompt = closePrompt else { return }
+        withAnimation(Theme.screenAnimation) { closePrompt = nil }
+        if button == .close { onClose?(prompt.next) }
+    }
+
+    private func askToClose(_ running: Game, then next: Game?) {
+        promptFocus = .close
+        withAnimation(Theme.screenAnimation) { closePrompt = ClosePrompt(running: running, next: next) }
     }
 
     /// A on a game: resume it if it's the one running, offer to close the running
@@ -201,7 +219,7 @@ final class LauncherState: ObservableObject {
         if game.id == runningGameID {
             onResume?()
         } else if let running = runningGame {
-            withAnimation(Theme.screenAnimation) { closePrompt = ClosePrompt(running: running, next: game) }
+            askToClose(running, then: game)
         } else {
             onLaunch?(game)
         }

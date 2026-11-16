@@ -329,7 +329,7 @@ private struct Backdrop: View {
     }
 }
 
-/// "Close <game>?" over a dimmed screen. A closes, B cancels.
+/// "Close <game>?" over a dimmed screen. Left/right picks a button, A presses it, B cancels.
 private struct ClosePromptView: View {
     @ObservedObject var state: LauncherState
     let prompt: LauncherState.ClosePrompt
@@ -340,7 +340,7 @@ private struct ClosePromptView: View {
         ZStack {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
-                .onTapGesture { state.handle(.back) }
+                .onTapGesture { state.choose(.cancel) }
 
             VStack(spacing: unit * 0.035) {
                 VStack(spacing: unit * 0.014) {
@@ -353,8 +353,8 @@ private struct ClosePromptView: View {
                         .opacity(0.8)
                 }
                 HStack(spacing: unit * 0.02) {
-                    button("Cancel", focused: false) { state.handle(.back) }
-                    button("Close", focused: true) { state.handle(.confirm) }
+                    button("Cancel", focused: state.promptFocus == .cancel) { state.choose(.cancel) }
+                    button("Close", focused: state.promptFocus == .close) { state.choose(.close) }
                 }
             }
             .foregroundStyle(.white)

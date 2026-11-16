@@ -416,6 +416,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         state.handle(.close)
         try? await Task.sleep(for: .seconds(1.2))
+        state.handle(.left)
+        try? await Task.sleep(for: .seconds(0.8))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("close-prompt-cancel.png"))
+        state.handle(.right)
+        try? await Task.sleep(for: .seconds(0.8))
         Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("close-prompt.png"))
 
         state.handle(.confirm)
