@@ -303,6 +303,14 @@ private struct TileRow: View {
         let rowFocused = state.area == .games || state.drag != nil
 
         ZStack(alignment: .topLeading) {
+            // The selector's glass, behind the tiles (glass hides whatever is under it).
+            Color.clear
+                .frame(width: layout.cell, height: layout.cell)
+                .glassEffect(.regular.tint(tint), in: selectorShape)
+                .offset(x: focusX)
+                .opacity(rowFocused ? 1 : 0)
+                .allowsHitTesting(false)
+
             ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
                 let launching = state.launchingGameID == game.id
                 // The game under the selector is magnified a little, as if seen through a lens.
@@ -330,11 +338,10 @@ private struct TileRow: View {
                     .offset(x: CGFloat(state.slot(of: index)) * layout.step)
             }
 
-            // The selector: one piece of lightly frosted glass that slides over the tiles,
-            // like a magnifying lens over the focused game.
-            Color.clear
+            // …and its lens over the focused game: a light frosted sheen and a bright glass
+            // edge, with the game magnified a little underneath.
+            SelectorLens(shape: selectorShape, rim: rim)
                 .frame(width: layout.cell, height: layout.cell)
-                .glassEffect(Glass.clear.tint(tint), in: selectorShape)
                 .offset(x: focusX)
                 .opacity(rowFocused ? 1 : 0)
                 .allowsHitTesting(false)
@@ -351,6 +358,28 @@ private struct TileRow: View {
         }
         .frame(width: CGFloat(max(state.games.count - 1, 0)) * layout.step + layout.cell,
                height: layout.cell, alignment: .topLeading)
+    }
+}
+
+/// The glass lens drawn over the focused game: frosted at the top-left where light
+/// catches it, clear in the middle so the game shows through, with a bright edge.
+private struct SelectorLens: View {
+    let shape: RoundedRectangle
+    let rim: CGFloat
+
+    var body: some View {
+        ZStack {
+            shape.fill(LinearGradient(stops: [
+                .init(color: .white.opacity(Theme.lensSheen), location: 0),
+                .init(color: .white.opacity(Theme.lensSheen * 0.25), location: 0.35),
+                .init(color: .clear, location: 0.6),
+                .init(color: .white.opacity(Theme.lensSheen * 0.4), location: 1),
+            ], startPoint: .topLeading, endPoint: .bottomTrailing))
+            shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.85), .white.opacity(0.2), .white.opacity(0.55)],
+                                              startPoint: .topLeading, endPoint: .bottomTrailing),
+                               lineWidth: rim * 0.3)
+        }
+        .blendMode(.plusLighter)
     }
 }
 
@@ -524,6 +553,9 @@ private struct SettingsRow: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: unit * 0.03, style: .continuous)
+        // Pressed, the glass draws in by `inset` on every side while the row keeps its
+        // height (scaling doesn't apply to glass), so the rows below stay put.
+        let inset = pressed ? unit * Theme.rowPressInset : 0
         HStack(spacing: unit * 0.024) {
             Image(systemName: item.symbol)
                 .font(.system(size: unit * 0.034, weight: .semibold)) // same weight as the row's title
@@ -543,12 +575,12 @@ private struct SettingsRow: View {
             }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, unit * 0.03)
-        .padding(.vertical, unit * 0.022)
+        .padding(.horizontal, unit * 0.03 - inset)
+        .padding(.vertical, unit * 0.022 - inset)
         .glassEffect(focused ? Glass.regular.tint(.white.opacity(Theme.focusedGlassTint)) : .regular, in: shape)
         .overlay(shape.fill(.black.opacity(pressed ? Theme.rowPressDarken : 0)))
         .overlay(shape.strokeBorder(.white.opacity(focused ? 0.85 : 0), lineWidth: unit * 0.003))
-        .scaleEffect(pressed ? Theme.rowPressScale : 1)
+        .padding(inset)
     }
 }
 

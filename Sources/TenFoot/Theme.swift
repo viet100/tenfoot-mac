@@ -17,7 +17,8 @@ enum Theme {
     // Selector (the glass that slides behind the focused tile)
     static let selectorRim: CGFloat = 0.016      // glass visible around the tile, × height
     static let selectorTint: Double = 0.25       // how much of the game's colour tints the glass
-    static let selectorMagnify: CGFloat = 1.05   // the focused game grows this much under the selector
+    static let selectorMagnify: CGFloat = 1.05   // the focused game grows this much under the selector's lens
+    static let lensSheen: Double = 0.22          // white frost at the lens's top-left corner
 
     static let focusedGlassTint: Double = 0.22   // white tint on focused buttons and menu rows
 
@@ -75,7 +76,7 @@ enum Theme {
 
     // Starting a game
     static let pressScale: CGFloat = 0.90          // a tile shrinks to this when pressed, then springs back
-    static let rowPressScale: CGFloat = 0.96       // a Settings row shrinks to this while its picker is open
+    static let rowPressInset: CGFloat = 0.008      // a Settings row draws in this much while its picker is open, × height
     static let rowPressDarken: Double = 0.25       // black over a pressed Settings row
     static let pickerDelay: Double = 0.15          // seconds the press shows before the file picker opens
     static let launchOthersOpacity: Double = 0.35  // the other tiles fade back while a game starts
