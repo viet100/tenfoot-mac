@@ -303,16 +303,10 @@ private struct TileRow: View {
         let rowFocused = state.area == .games || state.drag != nil
 
         ZStack(alignment: .topLeading) {
-            // The selector: one piece of glass that slides behind the tiles.
-            Color.clear
-                .frame(width: layout.cell, height: layout.cell)
-                .glassEffect(.regular.tint(tint), in: selectorShape)
-                .offset(x: focusX)
-                .opacity(rowFocused ? 1 : 0)
-                .allowsHitTesting(false)
-
             ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
                 let launching = state.launchingGameID == game.id
+                // The game under the selector is magnified a little, as if seen through a lens.
+                let magnified = rowFocused && state.slot(of: index) == state.selectorIndex && state.drag?.id != game.id
                 TileView(game: game, tile: layout.tile, unit: unit, running: game.id == state.runningGameID,
                          launching: launching)
                     // A quick squeeze and spring back when the game is pressed.
@@ -326,6 +320,7 @@ private struct TileRow: View {
                                            spring: .bouncy(duration: Theme.pressReleaseDuration))
                         }
                     }
+                    .scaleEffect(magnified ? Theme.selectorMagnify : 1)
                     // While a game starts, the others step back.
                     .opacity(state.launchingGameID != nil && !launching ? Theme.launchOthersOpacity : 1)
                     // The dragged game's own tile waits, invisible, in the slot it will drop into.
@@ -334,6 +329,15 @@ private struct TileRow: View {
                     .contentShape(selectorShape.inset(by: rim)) // the tile is what you can click, not the rim
                     .offset(x: CGFloat(state.slot(of: index)) * layout.step)
             }
+
+            // The selector: one piece of lightly frosted glass that slides over the tiles,
+            // like a magnifying lens over the focused game.
+            Color.clear
+                .frame(width: layout.cell, height: layout.cell)
+                .glassEffect(Glass.clear.tint(tint), in: selectorShape)
+                .offset(x: focusX)
+                .opacity(rowFocused ? 1 : 0)
+                .allowsHitTesting(false)
 
             // The title travels with the selector.
             BlurText(state.focusedGame?.title ?? "")

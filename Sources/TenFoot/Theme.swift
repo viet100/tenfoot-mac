@@ -17,6 +17,7 @@ enum Theme {
     // Selector (the glass that slides behind the focused tile)
     static let selectorRim: CGFloat = 0.016      // glass visible around the tile, × height
     static let selectorTint: Double = 0.25       // how much of the game's colour tints the glass
+    static let selectorMagnify: CGFloat = 1.05   // the focused game grows this much under the selector
 
     static let focusedGlassTint: Double = 0.22   // white tint on focused buttons and menu rows
 
