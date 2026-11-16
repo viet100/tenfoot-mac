@@ -1,5 +1,5 @@
-.build/
-.swiftpm/
-build/
-snapshots/
+/.build/
+/.swiftpm/
+/build/
+/snapshots/
 .DS_Store

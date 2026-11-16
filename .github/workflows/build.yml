@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-26
@@ -49,3 +52,28 @@ jobs:
         with:
           name: ui-snapshots
           path: snapshots/
+
+      # Commit the screenshots back to the branch so they can be viewed from a git checkout.
+      # Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
+      - name: Commit snapshots to branch
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        run: |
+          mkdir -p docs/snapshots
+          for png in snapshots/*.png; do
+            case "$png" in *-viewcache.png) continue ;; esac
+            name="$(basename "$png" .png)"
+            sips --resampleWidth 1920 -s format jpeg -s formatOptions 85 "$png" --out "docs/snapshots/$name.jpg" >/dev/null
+          done
+          git add docs/snapshots
+          if git diff --cached --quiet; then
+            echo "Snapshots unchanged"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update UI snapshots"
+          git fetch origin "${{ github.ref_name }}"
+          if git rebase "origin/${{ github.ref_name }}"; then
+            git push origin "HEAD:${{ github.ref_name }}"
+          else
+            echo "::warning::Branch moved on; snapshots not committed"
+          fi
