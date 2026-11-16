@@ -34,7 +34,7 @@ final class WindowFullscreener {
         guard AXIsProcessTrusted() else {
             if !askedForPermission {
                 askedForPermission = true
-                let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+                let prompt = ["AXTrustedCheckOptionPrompt": true] as CFDictionary  // kAXTrustedCheckOptionPrompt
                 _ = AXIsProcessTrustedWithOptions(prompt)
                 onNeedsPermission?()
             }
@@ -100,9 +100,9 @@ final class WindowFullscreener {
     private static func fill(_ window: AXUIElement, screen: CGRect) {
         var origin = screen.origin, size = screen.size
         if let position = AXValueCreate(.cgPoint, &origin), let extent = AXValueCreate(.cgSize, &size) {
-            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
-            AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, extent)
-            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+            _ = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+            _ = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, extent)
+            _ = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
         }
     }
 
