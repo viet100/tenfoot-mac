@@ -40,6 +40,7 @@ enum Theme {
     static let popupDim: Double = 0.35           // black over the screen behind the close prompt
     static let popupTint: Double = 0.30          // black tint in the pop-up glass, so white text reads clearly
     static let popupTextShadow: Double = 0.35    // keeps text readable on the clear glass
+    static let popupScale: CGFloat = 0.92        // the close prompt grows from this size as it fades in
 
     // Hint bar
     static let hintSize: CGFloat = 0.022         // × height
@@ -84,6 +85,7 @@ enum Theme {
     static var motionScale: Double = 1
     static var selectorAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
     static var carouselAnimation: Animation { .smooth(duration: 0.18 * motionScale) }
+    static var popupAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
     static var screenAnimation: Animation { .smooth(duration: 0.35 * motionScale) }
     static var backdropAnimation: Animation { .easeInOut(duration: 0.60 * motionScale) }
     static var reorderAnimation: Animation { .smooth(duration: 0.28 * motionScale) }   // tiles making room

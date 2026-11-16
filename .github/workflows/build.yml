@@ -69,6 +69,7 @@ jobs:
           mkdir -p docs/snapshots
           .venv/bin/python scripts/make-gif.py snapshots/slide docs/snapshots/home-slide.gif
           .venv/bin/python scripts/make-gif.py snapshots/drag docs/snapshots/home-drag.gif || echo "::warning::No drag GIF"
+          .venv/bin/python scripts/make-gif.py snapshots/prompt docs/snapshots/close-prompt.gif || echo "::warning::No prompt GIF"
 
       - name: Upload app
         uses: actions/upload-artifact@v5

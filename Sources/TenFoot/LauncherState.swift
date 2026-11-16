@@ -235,13 +235,13 @@ final class LauncherState: ObservableObject {
     /// Picks a button of the close prompt (A on the focused one, or a click).
     func choose(_ button: PromptButton) {
         guard let prompt = closePrompt else { return }
-        withAnimation(Theme.screenAnimation) { closePrompt = nil }
+        withAnimation(Theme.popupAnimation) { closePrompt = nil }
         if button == .close { onClose?(prompt.next) }
     }
 
     private func askToClose(_ running: Game, then next: Game?) {
         promptFocus = .close
-        withAnimation(Theme.screenAnimation) { closePrompt = ClosePrompt(running: running, next: next) }
+        withAnimation(Theme.popupAnimation) { closePrompt = ClosePrompt(running: running, next: next) }
     }
 
     /// A on a game: resume it if it's the one running, offer to close the running

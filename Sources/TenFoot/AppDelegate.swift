@@ -589,6 +589,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? await Task.sleep(for: .seconds(1))
         Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-running-game.png"))
 
+        // The close prompt fading in, then out again on B.
+        let slowdown = 6.0
+        await record(window, to: directory.appendingPathComponent("prompt", isDirectory: true), slowdown: slowdown) {
+            self.state.handle(.close)
+            try? await Task.sleep(for: .seconds(1 * slowdown))
+            self.state.handle(.back)
+            try? await Task.sleep(for: .seconds(0.3 * slowdown))
+        }
+
         state.handle(.close)
         try? await Task.sleep(for: .seconds(1.2))
         state.handle(.left)

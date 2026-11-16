@@ -40,9 +40,15 @@ struct LauncherView: View {
                     .padding(layout.unit * Theme.statusMargin)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
 
+                // The dim and the panel fade separately; the panel also eases in from a
+                // little smaller and shrinks a little as it goes.
                 if let prompt = state.closePrompt {
-                    ClosePromptView(state: state, prompt: prompt, unit: layout.unit)
+                    Color.black.opacity(Theme.popupDim)
+                        .ignoresSafeArea()
+                        .onTapGesture { state.choose(.cancel) }
                         .transition(.opacity)
+                    ClosePromptView(state: state, prompt: prompt, unit: layout.unit)
+                        .transition(.scale(scale: Theme.popupScale).combined(with: .opacity))
                 }
 
                 // The message ("Starting…", or an error) sits on its own line above the hints.
@@ -529,32 +535,26 @@ private struct ClosePromptView: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: unit * 0.04, style: .continuous)
-        ZStack {
-            Color.black.opacity(Theme.popupDim)
-                .ignoresSafeArea()
-                .onTapGesture { state.choose(.cancel) }
-
-            VStack(spacing: unit * 0.035) {
-                VStack(spacing: unit * 0.014) {
-                    Text("Close \(prompt.running.title)?")
-                        .font(.system(size: unit * Theme.screenTitleSize * 0.8, weight: .bold))
-                        .multilineTextAlignment(.center)
-                    Text(detail)
-                        .font(.system(size: unit * Theme.settingsDetailSize * 1.2))
-                        .multilineTextAlignment(.center)
-                        .opacity(0.8)
-                }
-                HStack(spacing: unit * 0.02) {
-                    button("Cancel", focused: state.promptFocus == .cancel) { state.choose(.cancel) }
-                    button("Close", focused: state.promptFocus == .close) { state.choose(.close) }
-                }
+        VStack(spacing: unit * 0.035) {
+            VStack(spacing: unit * 0.014) {
+                Text("Close \(prompt.running.title)?")
+                    .font(.system(size: unit * Theme.screenTitleSize * 0.8, weight: .bold))
+                    .multilineTextAlignment(.center)
+                Text(detail)
+                    .font(.system(size: unit * Theme.settingsDetailSize * 1.2))
+                    .multilineTextAlignment(.center)
+                    .opacity(0.8)
             }
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
-            .padding(unit * 0.05)
-            .frame(width: unit * 0.9)
-            .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
+            HStack(spacing: unit * 0.02) {
+                button("Cancel", focused: state.promptFocus == .cancel) { state.choose(.cancel) }
+                button("Close", focused: state.promptFocus == .close) { state.choose(.close) }
+            }
         }
+        .foregroundStyle(.white)
+        .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
+        .padding(unit * 0.05)
+        .frame(width: unit * 0.9)
+        .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
     }
 
     private var detail: String {
