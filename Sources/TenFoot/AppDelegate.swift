@@ -92,6 +92,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installKeyboardInput()
         installScrollInput()
 
+        // Once the game is in front (TenFoot steps back), its tile stops showing the spinner.
+        NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.state.setLaunching(nil) }
+        }
+
         if let snapshotDir {
             Task { await renderSnapshots(of: window, to: snapshotDir) }
         }
@@ -111,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Opens the game; when it has quit, TenFoot comes back to the front.
     private func launch(_ game: Game) {
         state.show(message: "Starting \(game.title)…", for: 6)
+        state.setLaunching(game.id)
         state.setRunningGame(game.id)
         controllers?.watchInBackground = true
         launcher.launch(game, onFailure: { [weak self] message in
@@ -136,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
         private func gameEnded() {
+        state.setLaunching(nil)
         state.setRunningGame(nil)
         controllers?.watchInBackground = false
     }
@@ -512,6 +520,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.select(index)
         try? await Task.sleep(for: .seconds(1))
         state.handle(.confirm)
+        // The press bounce has settled; the tile shows the spinner until Calculator is in front.
+        try? await Task.sleep(for: .seconds(0.6))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("launch-pressed.png"))
+        print("LAUNCH CHECK: spinner on Calculator right after pressing: \(state.launchingGameID == state.games[index].id)")
 
         var calculator: NSRunningApplication?
         for _ in 0..<40 where calculator == nil {

@@ -88,6 +88,12 @@ final class LauncherState: ObservableObject {
     @Published private(set) var closePrompt: ClosePrompt?
     @Published private(set) var promptFocus: PromptButton = .close
     @Published private(set) var drag: Drag?
+
+    /// The game that is starting: its tile shows a spinner until the game is in front.
+    @Published private(set) var launchingGameID: UUID?
+    private var launchTimeout: Task<Void, Never>?
+    /// How many times each game has been pressed; each press plays its tile's bounce.
+    @Published private(set) var presses: [UUID: Int] = [:]
     private var dragScroll: Task<Void, Never>?
     private var dragScrollDirection = 0
 
@@ -241,6 +247,7 @@ final class LauncherState: ObservableObject {
     /// A on a game: resume it if it's the one running, offer to close the running
     /// one if it's different, otherwise start it.
     private func start(_ game: Game) {
+        presses[game.id, default: 0] += 1
         if game.id == runningGameID {
             onResume?()
         } else if let running = runningGame {
@@ -252,6 +259,19 @@ final class LauncherState: ObservableObject {
 
     // MARK: - Running game
 
+    /// Shows (or, with nil, clears) the spinner on a starting game's tile.
+    func setLaunching(_ id: UUID?) {
+        guard id != launchingGameID else { return }
+        launchTimeout?.cancel()
+        withAnimation(Theme.screenAnimation) { launchingGameID = id }
+        guard id != nil else { return }
+        launchTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Theme.launchFeedbackTimeout))
+            guard !Task.isCancelled else { return }
+            self?.setLaunching(nil)
+        }
+    }
+
     func setRunningGame(_ id: UUID?) {
         runningGameID = id
         if id == nil { closePrompt = nil }
@@ -259,6 +279,7 @@ final class LauncherState: ObservableObject {
 
     /// Back from a game with Home: the home screen with the running game focused.
     func showRunningGame() {
+        setLaunching(nil)
         closePrompt = nil
         messageClear?.cancel()
         message = nil

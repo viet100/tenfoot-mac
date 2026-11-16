@@ -66,6 +66,13 @@ enum Theme {
     static let dragEdgeZone: CGFloat = 0.10        // pointer this close to the screen edge scrolls the row, × height
     static let dragScrollInterval: Double = 0.35   // seconds per tile while scrolling at the edge
 
+    // Starting a game
+    static let pressScale: CGFloat = 0.90          // a tile shrinks to this when pressed, then springs back
+    static let launchOthersOpacity: Double = 0.35  // the other tiles fade back while a game starts
+    static let launchDarken: Double = 0.30         // black over the starting game's tile, behind the spinner
+    static let spinnerPeriod: Double = 0.9         // seconds per turn of the spinner
+    static let launchFeedbackTimeout: Double = 60  // the spinner gives up after this many seconds
+
     // Games
     static let closeTimeout: Double = 10    // seconds a game gets to quit before it's stopped outright
 
@@ -81,5 +88,7 @@ enum Theme {
     static var reorderAnimation: Animation { .smooth(duration: 0.28 * motionScale) }   // tiles making room
     static var liftAnimation: Animation { .smooth(duration: 0.18 * motionScale) }      // picking a game up
     static var dropAnimation: Animation { .smooth(duration: 0.25 * motionScale) }      // settling into its slot
+    static var pressDownDuration: Double { 0.08 * motionScale }
+    static var pressReleaseDuration: Double { 0.45 * motionScale }
     static var dragScrollAnimation: Animation { .linear(duration: dragScrollInterval * motionScale) }
 }

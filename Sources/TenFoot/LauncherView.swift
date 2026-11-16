@@ -173,7 +173,21 @@ private struct TileRow: View {
                 .allowsHitTesting(false)
 
             ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
-                TileView(game: game, tile: layout.tile, unit: unit, running: game.id == state.runningGameID)
+                let launching = state.launchingGameID == game.id
+                TileView(game: game, tile: layout.tile, unit: unit, running: game.id == state.runningGameID,
+                         launching: launching)
+                    // A quick squeeze and spring back when the game is pressed.
+                    .keyframeAnimator(initialValue: CGFloat(1),
+                                      trigger: state.presses[game.id] ?? 0) { view, scale in
+                        view.scaleEffect(scale)
+                    } keyframes: { _ in
+                        KeyframeTrack(\.self) {
+                            CubicKeyframe(Theme.pressScale, duration: Theme.pressDownDuration)
+                            SpringKeyframe(1, duration: Theme.pressReleaseDuration, spring: .bouncy)
+                        }
+                    }
+                    // While a game starts, the others step back.
+                    .opacity(state.launchingGameID != nil && !launching ? Theme.launchOthersOpacity : 1)
                     // The dragged game's own tile waits, invisible, in the slot it will drop into.
                     .opacity(state.drag?.id == game.id ? 0 : 1)
                     .frame(width: layout.cell, height: layout.cell)
@@ -283,6 +297,7 @@ private struct TileView: View {
     let tile: CGFloat
     let unit: CGFloat
     let running: Bool
+    var launching = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: tile * Theme.tileCornerRadius, style: .continuous)
@@ -298,9 +313,38 @@ private struct TileView: View {
             .frame(width: tile, height: tile)
             .clipShape(shape)
             .contentShape(shape)
-            .overlay(alignment: .bottomLeading) {
-                if running { RunningBadge(unit: unit).padding(tile * 0.06) }
+            .overlay {
+                if launching {
+                    ZStack {
+                        shape.fill(.black.opacity(Theme.launchDarken))
+                        LaunchSpinner(unit: unit)
+                    }
+                    .transition(.opacity)
+                }
             }
+            .overlay(alignment: .bottomLeading) {
+                if running && !launching { RunningBadge(unit: unit).padding(tile * 0.06) }
+            }
+    }
+}
+
+/// A turning ring on glass, over a game that is starting.
+private struct LaunchSpinner: View {
+    let unit: CGFloat
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let turn = context.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: Theme.spinnerPeriod) / Theme.spinnerPeriod
+            Circle()
+                .trim(from: 0, to: 0.72)
+                .stroke(.white, style: StrokeStyle(lineWidth: unit * 0.007, lineCap: .round))
+                .rotationEffect(.degrees(turn * 360))
+        }
+        .frame(width: unit * 0.055, height: unit * 0.055)
+        .padding(unit * 0.024)
+        .glassEffect(.clear, in: Circle())
+        .allowsHitTesting(false)
     }
 }
 
