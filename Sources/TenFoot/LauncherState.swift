@@ -217,6 +217,8 @@ final class LauncherState: ObservableObject {
     /// Back from a game with Home: the home screen with the running game focused.
     func showRunningGame() {
         closePrompt = nil
+        messageClear?.cancel()
+        message = nil
         screen = .home
         if let index = games.firstIndex(where: { $0.id == runningGameID }) {
             select(index)

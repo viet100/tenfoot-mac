@@ -396,6 +396,7 @@ private struct MessageBanner: View {
             .foregroundStyle(.white)
             .lineLimit(2)
             .frame(maxWidth: unit * 0.9, alignment: .leading)
+            .fixedSize(horizontal: true, vertical: false) // as wide as the text (up to the maximum), not the full width
             .padding(.horizontal, unit * 0.03)
             .padding(.vertical, unit * 0.016)
             .glassEffect(.regular, in: Capsule())

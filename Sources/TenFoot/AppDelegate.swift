@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let launcher = GameLauncher()
     /// A game to start once the running one has closed.
     private var pendingLaunch: Game?
+    private var isTerminating = false
     private var window: LauncherWindow?
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
@@ -90,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        isTerminating = true
         NSApp.presentationOptions = []
     }
 
@@ -143,10 +145,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.makeKeyAndOrderFront(nil)
         NSCursor.setHiddenUntilMouseMoves(true)
 
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
-            if let error { print("Couldn't bring TenFoot forward: \(error)") }
+        // Only if that didn't work (and TenFoot isn't on its way out, which would
+        // make Launch Services start a fresh copy).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard !NSApp.isActive, !self.isTerminating else { return }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+                if let error { print("Couldn't bring TenFoot forward: \(error)") }
+            }
         }
     }
 
