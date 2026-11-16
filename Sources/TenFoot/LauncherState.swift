@@ -42,7 +42,14 @@ final class LauncherState: ObservableObject {
         }
     }
 
-    enum HintKind { case move, confirm, back }
+    enum HintKind { case move, confirm, back, close }
+
+    /// "Close <game>?" — shown before closing a running game. `next` is the game to
+    /// start once it has closed, when the user picked a different game.
+    struct ClosePrompt {
+        let running: Game
+        let next: Game?
+    }
 
     @Published private(set) var games: [Game]
     @Published private(set) var screen: Screen = .home
@@ -59,6 +66,14 @@ final class LauncherState: ObservableObject {
     var onAddApp: (() -> Void)?
     /// Called when the user starts a game.
     var onLaunch: ((Game) -> Void)?
+    /// Called to go back to the running game.
+    var onResume: (() -> Void)?
+    /// Called to close the running game; the game passed in starts once it has closed.
+    var onClose: ((Game?) -> Void)?
+
+    /// The game that is running (in the background while TenFoot is shown).
+    @Published private(set) var runningGameID: UUID?
+    @Published private(set) var closePrompt: ClosePrompt?
 
     /// A short message at the bottom of the screen ("Starting…", or an error).
     @Published private(set) var message: String?
@@ -89,17 +104,35 @@ final class LauncherState: ObservableObject {
         area == .games ? backdropGame : nil
     }
 
+    var runningGame: Game? {
+        games.first { $0.id == runningGameID }
+    }
+
     var hints: [(HintKind, String)] {
+        if closePrompt != nil {
+            return [(.confirm, "Close"), (.back, "Cancel")]
+        }
         switch (screen, area) {
-        case (.home, .games): [(.move, "Move"), (.confirm, "Start")]
-        case (.home, .system): [(.move, "Move"), (.confirm, "Open")]
-        case (.settings, _): [(.move, "Move"), (.confirm, "Select"), (.back, "Back")]
+        case (.home, .games) where focusedGame != nil && focusedGame?.id == runningGameID:
+            return [(.move, "Move"), (.confirm, "Resume"), (.close, "Close")]
+        case (.home, .games): return [(.move, "Move"), (.confirm, "Start")]
+        case (.home, .system): return [(.move, "Move"), (.confirm, "Open")]
+        case (.settings, _): return [(.move, "Move"), (.confirm, "Select"), (.back, "Back")]
         }
     }
 
     // MARK: - Input
 
     func handle(_ action: InputAction) {
+        if closePrompt != nil {
+            handlePrompt(action)
+            return
+        }
+        if action == .home {
+            // Already in TenFoot: Home goes back to the home screen.
+            if screen != .home { withAnimation(Theme.screenAnimation) { screen = .home } }
+            return
+        }
         switch screen {
         case .home: handleHome(action)
         case .settings: handleSettings(action)
@@ -111,7 +144,11 @@ final class LauncherState: ObservableObject {
         case (.games, .left): moveGames(by: -1)
         case (.games, .right): moveGames(by: 1)
         case (.games, .confirm):
-            if let game = focusedGame { onLaunch?(game) }
+            if let game = focusedGame { start(game) }
+        case (.games, .close):
+            if let game = focusedGame, game.id == runningGameID {
+                withAnimation(Theme.screenAnimation) { closePrompt = ClosePrompt(running: game, next: nil) }
+            }
         case (.games, .down):
             withAnimation(Theme.selectorAnimation) { area = .system }
         case (.system, .up) where !games.isEmpty:
@@ -140,8 +177,49 @@ final class LauncherState: ObservableObject {
             }
         case .back:
             withAnimation(Theme.screenAnimation) { screen = .home }
-        case .left, .right:
+        case .left, .right, .close, .home:
             break
+        }
+    }
+
+    private func handlePrompt(_ action: InputAction) {
+        switch action {
+        case .confirm:
+            let next = closePrompt?.next
+            withAnimation(Theme.screenAnimation) { closePrompt = nil }
+            onClose?(next)
+        case .back, .home:
+            withAnimation(Theme.screenAnimation) { closePrompt = nil }
+        default:
+            break
+        }
+    }
+
+    /// A on a game: resume it if it's the one running, offer to close the running
+    /// one if it's different, otherwise start it.
+    private func start(_ game: Game) {
+        if game.id == runningGameID {
+            onResume?()
+        } else if let running = runningGame {
+            withAnimation(Theme.screenAnimation) { closePrompt = ClosePrompt(running: running, next: game) }
+        } else {
+            onLaunch?(game)
+        }
+    }
+
+    // MARK: - Running game
+
+    func setRunningGame(_ id: UUID?) {
+        runningGameID = id
+        if id == nil { closePrompt = nil }
+    }
+
+    /// Back from a game with Home: the home screen with the running game focused.
+    func showRunningGame() {
+        closePrompt = nil
+        screen = .home
+        if let index = games.firstIndex(where: { $0.id == runningGameID }) {
+            select(index)
         }
     }
 
@@ -158,8 +236,9 @@ final class LauncherState: ObservableObject {
     /// Clicking a game focuses it; clicking the focused game starts it.
     func click(game index: Int) {
         guard screen == .home, games.indices.contains(index) else { return }
+        guard closePrompt == nil else { return }
         if area == .games && index == focusIndex {
-            onLaunch?(games[index])
+            start(games[index])
             return
         }
         if area != .games {
@@ -172,7 +251,7 @@ final class LauncherState: ObservableObject {
 
     /// Clicking a round button opens it.
     func click(systemButton index: Int) {
-        guard screen == .home, SystemButton.allCases.indices.contains(index) else { return }
+        guard closePrompt == nil, screen == .home, SystemButton.allCases.indices.contains(index) else { return }
         withAnimation(Theme.selectorAnimation) {
             area = .system
             systemIndex = index
@@ -192,6 +271,7 @@ final class LauncherState: ObservableObject {
         switch hint {
         case .confirm: handle(.confirm)
         case .back: handle(.back)
+        case .close: handle(.close)
         case .move: break
         }
     }
@@ -199,7 +279,7 @@ final class LauncherState: ObservableObject {
     /// Scroll wheel or trackpad swipe: along the game row on the home screen,
     /// up and down the list in Settings. Positive is right/down.
     func scroll(by steps: Int) {
-        guard steps != 0 else { return }
+        guard steps != 0, closePrompt == nil else { return }
         switch screen {
         case .home:
             guard !games.isEmpty else { return }

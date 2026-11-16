@@ -53,6 +53,9 @@ enum Theme {
     static let stickRelease: Float = 0.3    // stick must return below this to release
     static let trackpadStep: CGFloat = 120  // points of trackpad swipe per move
 
+    // Games
+    static let closeTimeout: Double = 10    // seconds a game gets to quit before it's stopped outright
+
     // Backdrop
     static let backdropDim: Double = 0.35        // black overlay on the colour mesh
 

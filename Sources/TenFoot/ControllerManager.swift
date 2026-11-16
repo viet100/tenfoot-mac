@@ -3,7 +3,8 @@ import GameController
 import TenFootCore
 
 /// Reads every connected game controller and turns it into `InputAction`s:
-/// the d-pad or left stick moves (with hold-to-repeat), A confirms, B goes back.
+/// the d-pad or left stick moves (with hold-to-repeat), A confirms, B goes back,
+/// X closes, and Home (or − and + together) goes back to TenFoot from a game.
 ///
 /// Works the same for DualShock/DualSense, Xbox, Switch Pro, a Joy-Con pair and a
 /// single sideways Joy-Con: all of them are read through GameController's generic
@@ -11,19 +12,37 @@ import TenFootCore
 /// stick in its sideways orientation. "A" and "B" are each controller's own
 /// confirm and back buttons (on Nintendo controllers A is the right-hand button).
 ///
-/// Controllers only deliver input while TenFoot is the frontmost app, so nothing is
-/// read once you switch away or quit.
+/// Controllers only deliver input while TenFoot is the frontmost app, except while a
+/// game is running: then `watchInBackground` is on, and only Home is acted on.
 @MainActor
 final class ControllerManager: ObservableObject {
     static let keyboardMoveSymbol = "arrow.up.and.down.and.arrow.left.and.right"
     static let keyboardConfirmSymbol = "return"
     static let keyboardBackSymbol = "escape"
+    static let keyboardCloseSymbol = "x.square"
 
-    /// Glyphs for the hint bar: the connected controller's own d-pad, A and B,
+    /// Glyphs for the hint bar: the connected controller's own d-pad and buttons,
     /// or keyboard keys when no controller is connected.
     @Published private(set) var moveSymbol = ControllerManager.keyboardMoveSymbol
     @Published private(set) var confirmSymbol = ControllerManager.keyboardConfirmSymbol
     @Published private(set) var backSymbol = ControllerManager.keyboardBackSymbol
+    @Published private(set) var closeSymbol = ControllerManager.keyboardCloseSymbol
+
+    /// While a game runs, keep reading controllers in the background so Home works.
+    var watchInBackground = false {
+        didSet {
+            guard watchInBackground != oldValue else { return }
+            GCController.shouldMonitorBackgroundEvents = watchInBackground
+            if watchInBackground {
+                // Keep the poll timer running at full speed while TenFoot is behind the game.
+                activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated,
+                                                                 reason: "Watching for the Home button")
+            } else if let activity {
+                ProcessInfo.processInfo.endActivity(activity)
+                self.activity = nil
+            }
+        }
+    }
 
     private let onAction: (InputAction) -> Void
     private var horizontal = RepeatFilter(initialDelay: Theme.repeatDelay, interval: Theme.repeatInterval)
@@ -32,6 +51,7 @@ final class ControllerManager: ObservableObject {
     private var buttonsDown: [ObjectIdentifier: Set<String>] = [:]
     private var observers: [NSObjectProtocol] = []
     private var timer: Timer?
+    private var activity: NSObjectProtocol?
 
     init(onAction: @escaping (InputAction) -> Void) {
         self.onAction = onAction
@@ -54,6 +74,11 @@ final class ControllerManager: ObservableObject {
         axes = axes.filter { connected.contains($0.key) }
         buttonsDown = buttonsDown.filter { connected.contains($0.key) }
 
+        // Let TenFoot have the Home button while it's in front, rather than the system.
+        for controller in GCController.controllers() {
+            controller.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
+        }
+
         let controller = GCController.current ?? GCController.controllers().first
         let profile = controller?.physicalInputProfile
         let pads = profile?.dpads ?? [:]
@@ -61,6 +86,7 @@ final class ControllerManager: ObservableObject {
         moveSymbol = controller == nil ? Self.keyboardMoveSymbol : (pad?.sfSymbolsName ?? "gamecontroller")
         confirmSymbol = profile?.buttons[GCInputButtonA]?.sfSymbolsName ?? Self.keyboardConfirmSymbol
         backSymbol = profile?.buttons[GCInputButtonB]?.sfSymbolsName ?? Self.keyboardBackSymbol
+        closeSymbol = profile?.buttons[GCInputButtonX]?.sfSymbolsName ?? Self.keyboardCloseSymbol
     }
 
     private func poll() {
@@ -77,7 +103,8 @@ final class ControllerManager: ObservableObject {
         }
         if !accepting {
             (x, y) = (0, 0)
-            pressed = []
+            // In the background only Home counts, and only while a game is running.
+            pressed = watchInBackground && NSApp.modalWindow == nil ? pressed.filter { $0 == .home } : []
         }
 
         // Horizontal wins when both are held, so a diagonal stick still moves along the row.
@@ -107,17 +134,27 @@ final class ControllerManager: ObservableObject {
         return (x, y)
     }
 
-    /// Confirm/back for buttons that went down since the last poll.
+    /// Actions for buttons that went down since the last poll.
     private func newlyPressedButtons(of controller: GCController) -> [InputAction] {
         let id = ObjectIdentifier(controller)
         let buttons = controller.physicalInputProfile.buttons
         let wasDown = buttonsDown[id] ?? []
         var down: Set<String> = []
         var actions: [InputAction] = []
-        for (name, action) in [(GCInputButtonA, InputAction.confirm), (GCInputButtonB, .back)] {
+        let mapping: [(String, InputAction)] = [
+            (GCInputButtonA, .confirm), (GCInputButtonB, .back), (GCInputButtonX, .close), (GCInputButtonHome, .home),
+        ]
+        for (name, action) in mapping {
             guard buttons[name]?.isPressed == true else { continue }
             down.insert(name)
             if !wasDown.contains(name) { actions.append(action) }
+        }
+        // − and + together also mean Home, for controllers whose Home button
+        // isn't reported (such as a Joy-Con pair).
+        let combo = "minus+plus"
+        if buttons[GCInputButtonOptions]?.isPressed == true && buttons[GCInputButtonMenu]?.isPressed == true {
+            down.insert(combo)
+            if !wasDown.contains(combo) && !actions.contains(.home) { actions.append(.home) }
         }
         buttonsDown[id] = down
         return actions

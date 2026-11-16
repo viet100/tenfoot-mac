@@ -29,7 +29,7 @@ final class GameLauncher {
         // Pressing A again while a game is starting or running brings it forward
         // instead of starting a second copy.
         if current?.id == game.id, session != nil {
-            bringGameForward()
+            resume()
             return
         }
         stopTracking()
@@ -109,7 +109,32 @@ final class GameLauncher {
         onFinished = nil
     }
 
-    private func bringGameForward() {
+    /// Asks every process of the game to quit, like ⌘Q. Anything still running
+    /// after `Theme.closeTimeout` is stopped outright. `onFinished` follows as usual.
+    func close() {
+        guard let session else { return }
+        for pid in session.processes {
+            if let app = NSRunningApplication(processIdentifier: pid) {
+                app.terminate()
+            } else {
+                kill(pid, SIGTERM)
+            }
+        }
+        let gameID = current?.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + Theme.closeTimeout) { [weak self] in
+            guard let self, self.current?.id == gameID, let session = self.session else { return }
+            for pid in session.processes where Self.isAlive(pid) {
+                if let app = NSRunningApplication(processIdentifier: pid) {
+                    app.forceTerminate()
+                } else {
+                    kill(pid, SIGKILL)
+                }
+            }
+        }
+    }
+
+    /// Brings the running game back to the front.
+    func resume() {
         guard let session else { return }
         for pid in session.processes {
             if let app = NSRunningApplication(processIdentifier: pid), app.activationPolicy == .regular {

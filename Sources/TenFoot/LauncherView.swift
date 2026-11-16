@@ -39,6 +39,11 @@ struct LauncherView: View {
                     .padding(layout.unit * Theme.statusMargin)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
 
+                if let prompt = state.closePrompt {
+                    ClosePromptView(state: state, prompt: prompt, unit: layout.unit)
+                        .transition(.opacity)
+                }
+
                 if let message = state.message {
                     MessageBanner(text: message, unit: layout.unit)
                         .padding(layout.unit * Theme.hintMargin)
@@ -111,7 +116,7 @@ private struct TileRow: View {
                 .allowsHitTesting(false)
 
             ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
-                TileView(game: game, tile: layout.tile, unit: unit)
+                TileView(game: game, tile: layout.tile, unit: unit, running: game.id == state.runningGameID)
                     .frame(width: layout.cell, height: layout.cell)
                     .onTapGesture { state.click(game: index) }
                     .offset(x: CGFloat(index) * layout.step)
@@ -137,6 +142,7 @@ private struct TileView: View {
     let game: Game
     let tile: CGFloat
     let unit: CGFloat
+    let running: Bool
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: tile * Theme.tileCornerRadius, style: .continuous)
@@ -152,6 +158,23 @@ private struct TileView: View {
             .frame(width: tile, height: tile)
             .clipShape(shape)
             .contentShape(shape)
+            .overlay(alignment: .bottomLeading) {
+                if running { RunningBadge(unit: unit).padding(tile * 0.06) }
+            }
+    }
+}
+
+/// Marks the game that is running in the background.
+private struct RunningBadge: View {
+    let unit: CGFloat
+
+    var body: some View {
+        Image(systemName: "play.fill")
+            .font(.system(size: unit * 0.022, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: unit * 0.05, height: unit * 0.05)
+            .glassEffect(.regular.tint(.black.opacity(0.3)), in: Circle())
+            .allowsHitTesting(false)
     }
 }
 
@@ -306,6 +329,62 @@ private struct Backdrop: View {
     }
 }
 
+/// "Close <game>?" over a dimmed screen. A closes, B cancels.
+private struct ClosePromptView: View {
+    @ObservedObject var state: LauncherState
+    let prompt: LauncherState.ClosePrompt
+    let unit: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: unit * 0.04, style: .continuous)
+        ZStack {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture { state.handle(.back) }
+
+            VStack(spacing: unit * 0.035) {
+                VStack(spacing: unit * 0.014) {
+                    Text("Close \(prompt.running.title)?")
+                        .font(.system(size: unit * Theme.screenTitleSize * 0.8, weight: .bold))
+                        .multilineTextAlignment(.center)
+                    Text(detail)
+                        .font(.system(size: unit * Theme.settingsDetailSize * 1.2))
+                        .multilineTextAlignment(.center)
+                        .opacity(0.8)
+                }
+                HStack(spacing: unit * 0.02) {
+                    button("Cancel", focused: false) { state.handle(.back) }
+                    button("Close", focused: true) { state.handle(.confirm) }
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(unit * 0.05)
+            .frame(width: unit * 0.9)
+            .glassEffect(.regular, in: shape)
+        }
+    }
+
+    private var detail: String {
+        if let next = prompt.next {
+            "\(next.title) will start once it has closed. Unsaved progress will be lost."
+        } else {
+            "Unsaved progress will be lost."
+        }
+    }
+
+    private func button(_ title: String, focused: Bool, action: @escaping () -> Void) -> some View {
+        let shape = Capsule()
+        return Text(title)
+            .font(.system(size: unit * Theme.settingsRowSize, weight: .semibold))
+            .frame(width: unit * 0.3)
+            .padding(.vertical, unit * 0.018)
+            .glassEffect(focused ? Glass.regular.tint(.white.opacity(Theme.focusedGlassTint)) : .regular, in: shape)
+            .overlay(shape.strokeBorder(.white.opacity(focused ? 0.85 : 0), lineWidth: unit * 0.003))
+            .contentShape(shape)
+            .onTapGesture(perform: action)
+    }
+}
+
 /// "Starting…" or an error, in the bottom-left corner.
 private struct MessageBanner: View {
     let text: String
@@ -350,6 +429,7 @@ private struct HintBar: View {
         case .move: controllers.moveSymbol
         case .confirm: controllers.confirmSymbol
         case .back: controllers.backSymbol
+        case .close: controllers.closeSymbol
         }
     }
 

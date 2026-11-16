@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var state: LauncherState!
     private var controllers: ControllerManager?
     private let launcher = GameLauncher()
+    /// A game to start once the running one has closed.
+    private var pendingLaunch: Game?
     private var window: LauncherWindow?
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
@@ -60,8 +62,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         state.onLaunch = { [weak self] game in self?.launch(game) }
+        state.onResume = { [weak self] in self?.launcher.resume() }
+        state.onClose = { [weak self] next in
+            self?.pendingLaunch = next
+            self?.launcher.close()
+        }
 
-        let controllers = ControllerManager { [weak self] action in self?.state.handle(action) }
+        let controllers = ControllerManager { [weak self] action in self?.handleControllerAction(action) }
         self.controllers = controllers
         let hosting = NSHostingView(rootView: LauncherView(state: state, status: status, controllers: controllers))
         hosting.sizingOptions = []
@@ -95,11 +102,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Opens the game; when it has quit, TenFoot comes back to the front.
     private func launch(_ game: Game) {
         state.show(message: "Starting \(game.title)…", for: 6)
+        state.setRunningGame(game.id)
+        controllers?.watchInBackground = true
         launcher.launch(game, onFailure: { [weak self] message in
+            self?.gameEnded()
             self?.state.show(message: message, for: 6)
         }, onFinished: { [weak self] in
-            self?.returnToLauncher()
+            guard let self else { return }
+            self.gameEnded()
+            self.returnToLauncher()
+            if let next = self.pendingLaunch {
+                self.pendingLaunch = nil
+                self.launch(next)
+            }
         })
+    }
+
+    private func gameEnded() {
+        state.setRunningGame(nil)
+        controllers?.watchInBackground = false
+    }
+
+    /// Home from inside a game brings TenFoot back with the game focused; the game
+    /// keeps running behind it. Everything else goes to the launcher as usual.
+    private func handleControllerAction(_ action: InputAction) {
+        if action == .home && !NSApp.isActive && launcher.current != nil {
+            state.showRunningGame()
+            returnToLauncher()
+        } else {
+            state.handle(action)
+        }
     }
 
     /// Brings TenFoot back to the front. Since macOS 14 an app in the background
@@ -157,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case 126: action = .up
                 case 36, 76: action = .confirm // Return, keypad Enter
                 case 53: action = .back        // Esc
+                case 7: action = .close        // X
                 default: return event
                 }
                 self.state.handle(action)
@@ -342,6 +375,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let seconds = String(format: "%.1f", Date().timeIntervalSince(quitAt))
         print("LAUNCH CHECK: opened Calculator (TenFoot in front while it ran: \(tenFootWasInFront)); "
               + (returned ? "PASSED, TenFoot came back \(seconds)s after Calculator quit" : "FAILED, TenFoot didn't come back"))
+
+        await checkHomeAndClose(window: window, directory: directory, bundleID: bundleID)
+    }
+
+    /// Opens Calculator again, presses Home (as a controller would, from the
+    /// background), then closes it from TenFoot. Logged as "CLOSE CHECK: …".
+    private func checkHomeAndClose(window: NSWindow, directory: URL, bundleID: String) async {
+        try? await Task.sleep(for: .seconds(1))
+        state.handle(.confirm)
+        var calculator: NSRunningApplication?
+        for _ in 0..<40 where calculator == nil || NSApp.isActive {
+            try? await Task.sleep(for: .seconds(0.25))
+            calculator = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first
+        }
+        guard calculator != nil else {
+            print("CLOSE CHECK: FAILED, Calculator didn't open")
+            return
+        }
+        try? await Task.sleep(for: .seconds(1))
+
+        handleControllerAction(.home)
+        var back = false
+        for _ in 0..<20 where !back {
+            try? await Task.sleep(for: .seconds(0.25))
+            back = NSApp.isActive
+        }
+        print("CLOSE CHECK: Home brought TenFoot back: \(back); Calculator still running: \(launcher.current != nil)")
+        try? await Task.sleep(for: .seconds(1))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-running-game.png"))
+
+        state.handle(.close)
+        try? await Task.sleep(for: .seconds(1.2))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("close-prompt.png"))
+
+        state.handle(.confirm)
+        var closed = false
+        for _ in 0..<60 where !closed {
+            try? await Task.sleep(for: .seconds(0.25))
+            closed = launcher.current == nil
+                && NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+        }
+        print("CLOSE CHECK: " + (closed && NSApp.isActive ? "PASSED, Calculator closed and TenFoot is in front"
+                                                          : "FAILED, closed: \(closed), TenFoot active: \(NSApp.isActive)"))
     }
 
     /// Apps every Mac has, standing in for the user's games in CI snapshots.
