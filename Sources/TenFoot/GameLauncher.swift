@@ -127,7 +127,7 @@ final class GameLauncher {
     /// after `Theme.closeTimeout` is stopped outright. `onFinished` follows as usual.
     func close() {
         guard let session else { return }
-        for pid in session.processes {
+        for pid in session.processes where GameSession.isRealProcess(pid) {
             if let app = NSRunningApplication(processIdentifier: pid) {
                 app.terminate()
             } else {
@@ -137,7 +137,7 @@ final class GameLauncher {
         let gameID = current?.id
         DispatchQueue.main.asyncAfter(deadline: .now() + Theme.closeTimeout) { [weak self] in
             guard let self, self.current?.id == gameID, let session = self.session else { return }
-            for pid in session.processes where Self.isAlive(pid) {
+            for pid in session.processes where GameSession.isRealProcess(pid) && Self.isAlive(pid) {
                 if let app = NSRunningApplication(processIdentifier: pid) {
                     app.forceTerminate()
                 } else {
@@ -187,7 +187,8 @@ final class GameLauncher {
     }
 
     private static func isAlive(_ pid: Int32) -> Bool {
-        kill(pid, 0) == 0 || errno == EPERM
+        guard GameSession.isRealProcess(pid) else { return false }
+        return kill(pid, 0) == 0 || errno == EPERM
     }
 
     /// A Windows program running under CrossOver/Wine.

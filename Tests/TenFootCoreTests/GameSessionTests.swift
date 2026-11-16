@@ -66,6 +66,18 @@ import Testing
         #expect(next)
     }
 
+    @Test func neverTracksAllProcesses() {
+        // -1 is what macOS reports for an app with no process; kill(-1) reaches every app.
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(-1, at: 0)
+        session.track(0, at: 0)
+        let wine = session.appLaunched(-1, isWine: true, at: 1)
+        let handoff = session.appLaunched(0, isWine: false, at: 1)
+        #expect(!wine)
+        #expect(!handoff)
+        #expect(session.processes.isEmpty)
+    }
+
     @Test func waitsForWineAfterTheCrossOverLauncherQuits() {
         var session = GameSession(expectsWine: true, at: 0)
         session.track(100, at: 0)       // CrossOver launcher

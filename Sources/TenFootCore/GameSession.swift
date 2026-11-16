@@ -43,7 +43,12 @@ public struct GameSession: Sendable {
     }
 
     /// The process TenFoot itself started (or the app it opened).
+    ///
+    /// Only real process IDs are kept. macOS reports -1 for an app that has no process
+    /// (one that already quit, like a Steam shortcut), and signalling -1 or 0 would
+    /// reach every app the user has open, not just the game.
     public mutating func track(_ pid: Int32, at now: Double) {
+        guard Self.isRealProcess(pid) else { return }
         processes.insert(pid)
         trackedAnything = true
     }
@@ -52,6 +57,7 @@ public struct GameSession: Sendable {
     /// counted as part of the game.
     @discardableResult
     public mutating func appLaunched(_ pid: Int32, isWine: Bool, at now: Double) -> Bool {
+        guard Self.isRealProcess(pid) else { return false }
         if processes.contains(pid) { return true }
         if isWine {
             sawWine = true
@@ -68,6 +74,11 @@ public struct GameSession: Sendable {
         guard processes.remove(pid) != nil else { return }
         lastChange = now
         handoffOpen = true
+    }
+
+    /// A process ID that names one process (not -1 or 0, which mean "all" or "this group").
+    public static func isRealProcess(_ pid: Int32) -> Bool {
+        pid > 0
     }
 
     /// True once the game has finished and the launcher should come back.
