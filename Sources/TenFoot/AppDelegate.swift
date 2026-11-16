@@ -132,6 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.showRunningGame()
             returnToLauncher()
         } else {
+            // Using the controller hides the pointer until the mouse moves again.
+            if NSApp.isActive { NSCursor.setHiddenUntilMouseMoves(true) }
             state.handle(action)
         }
     }
