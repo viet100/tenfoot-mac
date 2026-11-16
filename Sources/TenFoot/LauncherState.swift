@@ -80,6 +80,8 @@ final class LauncherState: ObservableObject {
     var onResume: (() -> Void)?
     /// Called to close the running game; the game passed in starts once it has closed.
     var onClose: ((Game?) -> Void)?
+    /// CI only: notes on mouse handling, printed to the log.
+    var trace: ((String) -> Void)?
 
     /// The game that is running (in the background while TenFoot is shown).
     @Published private(set) var runningGameID: UUID?
@@ -278,6 +280,7 @@ final class LauncherState: ObservableObject {
 
     /// Clicking a game focuses it; clicking the focused game starts it.
     func click(game index: Int) {
+        trace?("click on game \(index)")
         guard screen == .home, games.indices.contains(index) else { return }
         guard closePrompt == nil, drag == nil else { return }
         if area == .games && index == focusIndex {
@@ -372,7 +375,11 @@ final class LauncherState: ObservableObject {
 
     /// Picks up the game at `index`. Returns false if it can't be moved right now.
     func beginDrag(_ index: Int) -> Bool {
-        guard drag == nil, screen == .home, closePrompt == nil, games.indices.contains(index) else { return false }
+        guard drag == nil, screen == .home, closePrompt == nil, games.indices.contains(index) else {
+            trace?("couldn't pick up game \(index): dragging \(drag != nil), prompt \(closePrompt != nil)")
+            return false
+        }
+        trace?("picked up game \(index)")
         withAnimation(Theme.selectorAnimation) {
             drag = Drag(id: games[index].id, from: index, target: index)
             area = .games
@@ -421,6 +428,7 @@ final class LauncherState: ObservableObject {
     func endDrag() {
         setDragEdge(0)
         guard let drag else { return }
+        trace?("dropped game \(drag.from) on slot \(drag.target)")
         library.move(from: drag.from, to: drag.target)
         if saves {
             do {

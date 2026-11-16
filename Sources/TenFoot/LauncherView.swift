@@ -207,6 +207,7 @@ private struct TileRow: View {
     /// copy under the pointer and the other games making room for it.
     private func dragChanged(_ index: Int, _ value: DragGesture.Value) {
         if state.drag == nil {
+            if dragging.landing { state.trace?("drag on game \(index) ignored: still landing") }
             guard !dragging.landing, state.beginDrag(index) else { return }
             let center = layout.tileCenter(slot: index, scrollIndex: state.scrollIndex)
             dragging.grabOffset = CGSize(width: center.x - value.startLocation.x,
