@@ -7,9 +7,13 @@ TenFoot opens fullscreen and gives you a console-style home menu built for a TV 
 Step 1 of the build: the app skeleton and a static home screen with sample tiles. Controller input, your real games, and launching come in later steps.
 
 ## Try it
-1. Open the latest **Build** run under the repo's Actions tab and download the `TenFoot-app` artifact.
-2. Unzip it. The first time, right-click `TenFoot.app` and choose **Open**: it isn't notarized.
-3. Use **← →** to move between tiles and **⌘Q** to exit. The Dock and menu bar come back when you quit.
+1. Download the newest build: https://github.com/viet100/tenfoot-mac/releases/download/latest-dev/TenFoot.zip. The link stays the same and always has the latest version of the `dev` branch.
+2. Unzip it and move `TenFoot.app` to Applications if you like.
+3. The first time, macOS blocks it because it isn't notarized. Open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**. Or run this in Terminal:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/TenFoot.app
+   ```
+4. Use **← →** to move between tiles and **⌘Q** to exit. The Dock and menu bar come back when you quit.
 
 Requires macOS 26 or later.
 

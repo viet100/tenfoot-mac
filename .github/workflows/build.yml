@@ -53,6 +53,23 @@ jobs:
           name: TenFoot-app
           path: build/TenFoot.zip
 
+      # One fixed download link that always has the newest dev build:
+      # https://github.com/<owner>/<repo>/releases/download/latest-dev/TenFoot.zip
+      - name: Publish latest dev build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -f latest-dev "$GITHUB_SHA"
+          git push -f origin refs/tags/latest-dev
+          notes="Newest build of the dev branch, from commit ${GITHUB_SHA::7}. Replaced on every push."
+          if gh release view latest-dev >/dev/null 2>&1; then
+            gh release edit latest-dev --notes "$notes"
+          else
+            gh release create latest-dev --prerelease --title "Latest dev build" --notes "$notes"
+          fi
+          gh release upload latest-dev build/TenFoot.zip --clobber
+
       - name: Upload snapshots
         if: always()
         uses: actions/upload-artifact@v5
