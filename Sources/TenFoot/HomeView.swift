@@ -2,7 +2,6 @@ import SwiftUI
 
 struct HomeView: View {
     @ObservedObject var state: HomeState
-    @Namespace private var glassNamespace
 
     var body: some View {
         GeometryReader { geo in
@@ -25,8 +24,7 @@ struct HomeView: View {
                                 tileSize: tile,
                                 rim: rim,
                                 unit: unit,
-                                isFocused: index == state.row.index,
-                                glassNamespace: glassNamespace
+                                isFocused: index == state.row.index
                             )
                         }
                     }
@@ -61,7 +59,6 @@ private struct TileView: View {
     let rim: CGFloat
     let unit: CGFloat
     let isFocused: Bool
-    let glassNamespace: Namespace.ID
 
     var body: some View {
         let radius = tileSize * Theme.tileCornerRadius
@@ -75,13 +72,9 @@ private struct TileView: View {
                     radius: isFocused ? unit * 0.03 : unit * 0.012,
                     y: isFocused ? unit * 0.015 : unit * 0.006)
             .padding(rim)
-            .background {
-                if isFocused {
-                    Color.clear
-                        .glassEffect(.regular.tint(game.primary.opacity(Theme.focusGlassTint)), in: rimShape)
-                        .glassEffectID("focus", in: glassNamespace)
-                }
-            }
+            // Glass sits behind the art (its content); unfocused tiles get no glass.
+            .glassEffect(isFocused ? .regular.tint(game.primary.opacity(Theme.focusGlassTint)) : .identity,
+                         in: rimShape)
             .scaleEffect(isFocused ? Theme.focusScale : 1)
             .overlay(alignment: .topLeading) {
                 if isFocused {
