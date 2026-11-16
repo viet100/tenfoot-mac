@@ -19,6 +19,10 @@ final class GameLauncher {
     var trackedProcesses: Set<Int32> { session?.processes ?? [] }
 
     private var session: GameSession?
+    /// Counts sessions, so a late callback or timer from an earlier one can't touch a newer one.
+    private var sessionNumber = 0
+    /// Processes asked to quit by Close; only these are ever stopped outright.
+    private var closing: Set<Int32> = []
     private var onFinished: (() -> Void)?
     private var knownApps: Set<Int32> = []
     private var appsObservation: NSKeyValueObservation?
@@ -38,6 +42,8 @@ final class GameLauncher {
         stopTracking()
         fullscreener.reset()
 
+        sessionNumber += 1
+        let number = sessionNumber
         current = game
         self.onFinished = onFinished
         session = GameSession(expectsWine: Self.isCrossOverLauncher(game.url), at: now)
@@ -54,9 +60,9 @@ final class GameLauncher {
             configuration.activates = true
             NSWorkspace.shared.openApplication(at: game.url, configuration: configuration) { app, error in
                 DispatchQueue.main.async { [weak self] in
-                    guard let self, self.current?.id == game.id else { return }
+                    guard let self, self.sessionNumber == number, self.session != nil else { return }
                     if let app {
-                        self.session?.track(app.processIdentifier, at: self.now)
+                        self.track(app.processIdentifier)
                     } else {
                         self.stopTracking()
                         onFailure("Couldn't open \(game.title): \(error?.localizedDescription ?? "unknown error")")
@@ -66,7 +72,7 @@ final class GameLauncher {
         } else {
             do {
                 let process = try Self.run(executable: game.url)
-                session?.track(process.processIdentifier, at: now)
+                track(process.processIdentifier)
             } catch {
                 stopTracking()
                 onFailure("Couldn't start \(game.title): \(error.localizedDescription)")
@@ -76,6 +82,17 @@ final class GameLauncher {
 
     // MARK: - Tracking
 
+    /// Counts a process TenFoot opened as the game. If Close was already pressed
+    /// (the game was still starting), it's asked to quit straight away.
+    private func track(_ pid: Int32) {
+        guard pid != ProcessInfo.processInfo.processIdentifier, session != nil else { return }
+        session?.track(pid, at: now)
+        if session?.isClosing == true, GameSession.isRealProcess(pid), !closing.contains(pid) {
+            closing.insert(pid)
+            Self.askToQuit(pid)
+        }
+    }
+
     private func runningAppsChanged() {
         guard session != nil else { return }
         let apps = NSWorkspace.shared.runningApplications
@@ -84,13 +101,17 @@ final class GameLauncher {
             // The game's own app is always the game, without using up a hand-off.
             if let game = current, Self.isAppBundle(game.url),
                app.bundleURL?.standardizedFileURL == game.url.standardizedFileURL {
-                session?.track(app.processIdentifier, at: now)
+                track(app.processIdentifier)
                 continue
             }
             // A store like Steam can start when one of its games is opened, but it isn't
             // the game: it shouldn't be waited for, or quit when the game is closed.
-            if let id = app.bundleIdentifier, Self.storeLaunchers.contains(id) { continue }
-            let isWine = Self.isWine(app)
+            // Nor are macOS's own apps (System Settings opened from a permission prompt,
+            // Finder relaunching).
+            if let id = app.bundleIdentifier, Self.storeLaunchers.contains(id) || id.hasPrefix("com.apple.") {
+                continue
+            }
+            let isWine = session?.expectsWine == true && Self.isWine(app)
             // Background helpers and menu bar items only count if they're Wine.
             if isWine || app.activationPolicy == .regular {
                 session?.appLaunched(app.processIdentifier, isWine: isWine, at: now)
@@ -119,6 +140,7 @@ final class GameLauncher {
         timer = nil
         appsObservation = nil
         session = nil
+        closing = []
         current = nil
         onFinished = nil
     }
@@ -126,24 +148,33 @@ final class GameLauncher {
     /// Asks every process of the game to quit, like ⌘Q. Anything still running
     /// after `Theme.closeTimeout` is stopped outright. `onFinished` follows as usual.
     func close() {
-        guard let session else { return }
-        for pid in session.processes where GameSession.isRealProcess(pid) {
-            if let app = NSRunningApplication(processIdentifier: pid) {
-                app.terminate()
-            } else {
-                kill(pid, SIGTERM)
-            }
+        guard session != nil, session?.isClosing == false else { return }
+        session?.closeRequested()
+        closing = session?.processes ?? []
+        for pid in closing {
+            Self.askToQuit(pid)
         }
-        let gameID = current?.id
+        let number = sessionNumber
         DispatchQueue.main.asyncAfter(deadline: .now() + Theme.closeTimeout) { [weak self] in
-            guard let self, self.current?.id == gameID, let session = self.session else { return }
-            for pid in session.processes where GameSession.isRealProcess(pid) && Self.isAlive(pid) {
+            // Only this session's game, and only what Close asked to quit.
+            guard let self, self.sessionNumber == number, let session = self.session else { return }
+            for pid in self.closing.intersection(session.processes) where Self.isAlive(pid) {
                 if let app = NSRunningApplication(processIdentifier: pid) {
                     app.forceTerminate()
                 } else {
                     kill(pid, SIGKILL)
                 }
             }
+        }
+    }
+
+    /// Asks a process to quit, like ⌘Q.
+    private static func askToQuit(_ pid: Int32) {
+        guard GameSession.isRealProcess(pid) else { return }
+        if let app = NSRunningApplication(processIdentifier: pid) {
+            app.terminate()
+        } else {
+            kill(pid, SIGTERM)
         }
     }
 
@@ -160,11 +191,12 @@ final class GameLauncher {
 
     // MARK: - Helpers
 
-    /// Game stores that open alongside their games (Steam, Epic Games, GOG Galaxy).
+    /// Game stores that open alongside their games (Steam, Epic Games, GOG Galaxy, CrossOver).
     private static let storeLaunchers: Set<String> = [
         "com.valvesoftware.steam",
         "com.epicgames.EpicGamesLauncher",
         "com.gog.galaxy",
+        "com.codeweavers.CrossOver",
     ]
 
     private static func isAppBundle(_ url: URL) -> Bool {

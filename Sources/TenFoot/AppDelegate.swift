@@ -272,6 +272,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, !event.modifierFlags.contains(.command) else { return event }
             return MainActor.assumeIsolated {
                 guard event.window === self.window else { return event }
+                // Holding an arrow moves along; holding anything else does it only once,
+                // so a held Return can't pick something and then the next thing too.
+                if event.isARepeat && ![123, 124, 125, 126].contains(event.keyCode) { return nil }
                 let action: InputAction
                 switch event.keyCode {
                 case 123: action = .left

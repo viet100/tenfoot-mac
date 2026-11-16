@@ -4,11 +4,13 @@
 /// A game isn't always one process. A CrossOver launcher starts Wine processes and
 /// may quit straight away; a script may start the real app and exit. So the session
 /// takes in:
-/// - any Wine/CrossOver app that starts while it's running, and
+/// - for a CrossOver game, any Wine app that starts while it's running, and
 /// - the first other app that starts shortly after the game was launched, or
-///   shortly after one of its processes quit (a hand-off). Only one app is taken
-///   per hand-off, so apps you happen to open around the same time aren't counted
-///   as the game (and aren't quit with it).
+///   shortly after its last process quit (a hand-off). Only one app is taken per
+///   hand-off, so apps you happen to open around the same time aren't counted as
+///   the game (and aren't quit with it).
+///
+/// Once the game is being closed, nothing new is taken in.
 ///
 /// It's over once none of those are running and nothing has taken over for a short
 /// grace period. Times are in seconds.
@@ -28,6 +30,8 @@ public struct GameSession: Sendable {
 
     public private(set) var processes: Set<Int32> = []
     public let expectsWine: Bool
+    /// The game is being closed: no more apps are taken in.
+    public private(set) var isClosing = false
     public var timing: Timing
 
     private var sawWine = false
@@ -59,7 +63,8 @@ public struct GameSession: Sendable {
     public mutating func appLaunched(_ pid: Int32, isWine: Bool, at now: Double) -> Bool {
         guard Self.isRealProcess(pid) else { return false }
         if processes.contains(pid) { return true }
-        if isWine {
+        guard !isClosing else { return false }
+        if isWine && expectsWine {
             sawWine = true
         } else {
             guard handoffOpen, now - lastChange <= timing.handoffWindow else { return false }
@@ -73,7 +78,14 @@ public struct GameSession: Sendable {
     public mutating func processQuit(_ pid: Int32, at now: Double) {
         guard processes.remove(pid) != nil else { return }
         lastChange = now
-        handoffOpen = true
+        // A hand-off is when the game is gone and something takes over, not when
+        // one of several processes quits.
+        if processes.isEmpty { handoffOpen = true }
+    }
+
+    /// The user asked to close the game.
+    public mutating func closeRequested() {
+        isClosing = true
     }
 
     /// A process ID that names one process (not -1 or 0, which mean "all" or "this group").

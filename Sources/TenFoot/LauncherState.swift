@@ -155,7 +155,7 @@ final class LauncherState: ObservableObject {
     /// The game that is running (in the background while TenFoot is shown).
     @Published private(set) var runningGameID: UUID?
     @Published private(set) var closePrompt: ClosePrompt?
-    @Published private(set) var promptFocus: PromptButton = .close
+    @Published private(set) var promptFocus: PromptButton = .cancel
     @Published private(set) var drag: Drag?
     @Published private(set) var optionsMenu: OptionsMenu?
     @Published private(set) var optionsIndex = 0
@@ -332,7 +332,8 @@ final class LauncherState: ObservableObject {
     }
 
     private func askToClose(_ running: Game, then next: Game?) {
-        promptFocus = .close
+        // Start on Cancel, so a held or doubled press can't close the game.
+        promptFocus = .cancel
         withAnimation(Theme.popupAnimation) { closePrompt = ClosePrompt(running: running, next: next) }
     }
 

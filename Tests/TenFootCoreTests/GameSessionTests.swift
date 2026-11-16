@@ -66,6 +66,36 @@ import Testing
         #expect(next)
     }
 
+    @Test func takesNothingInOnceClosing() {
+        var session = GameSession(expectsWine: true, at: 0)
+        session.track(100, at: 0)
+        session.closeRequested()
+        session.processQuit(100, at: 1)
+        let app = session.appLaunched(200, isWine: false, at: 2)
+        let wine = session.appLaunched(300, isWine: true, at: 2)
+        #expect(!app)
+        #expect(!wine)
+        #expect(session.processes.isEmpty)
+    }
+
+    @Test func aHandOffReopensOnlyWhenTheGameIsGone() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)
+        session.track(101, at: 0)
+        session.appLaunched(200, isWine: false, at: 1)  // launch slot used
+        session.processQuit(101, at: 2)                 // one helper quits; 100 and 200 still run
+        let other = session.appLaunched(300, isWine: false, at: 3)
+        #expect(!other)
+    }
+
+    @Test func wineAppsOnlyJoinCrossOverGames() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)
+        session.appLaunched(200, isWine: false, at: 1)  // launch slot used
+        let wine = session.appLaunched(400, isWine: true, at: 600) // e.g. another CrossOver bottle
+        #expect(!wine)
+    }
+
     @Test func neverTracksAllProcesses() {
         // -1 is what macOS reports for an app with no process; kill(-1) reaches every app.
         var session = GameSession(expectsWine: false, at: 0)
