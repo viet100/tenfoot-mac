@@ -51,9 +51,10 @@ import Testing
 
     @Test func aGameQuittingAllowsAnotherHandOff() {
         var session = GameSession(expectsWine: false, at: 0)
-        session.track(100, at: 0)
-        session.appLaunched(200, isWine: false, at: 1)  // launch slot used
-        session.processQuit(200, at: 5)                 // e.g. a game restarting itself
+        session.track(100, at: 0)                       // a launcher
+        session.processQuit(100, at: 1)                 // hands off and quits
+        session.appLaunched(200, isWine: false, at: 2)  // the game
+        session.processQuit(200, at: 5)                 // restarts itself (e.g. after an update)
         let again = session.appLaunched(201, isWine: false, at: 6)
         #expect(again)
     }
