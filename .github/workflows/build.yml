@@ -79,10 +79,16 @@ jobs:
       # One fixed download link that always has the newest dev build:
       # https://github.com/<owner>/<repo>/releases/download/latest-dev/TenFoot.zip
       - name: Publish latest dev build
-        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        if: github.ref == 'refs/heads/dev'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A run that finishes after a newer push mustn't replace the newer build.
+          git fetch -q origin dev
+          if git log --format=%s "$GITHUB_SHA..origin/dev" | grep -vqx "Update UI snapshots"; then
+            echo "dev has moved on since this run started; leaving the newer build in place"
+            exit 0
+          fi
           git tag -f latest-dev "$GITHUB_SHA"
           git push -f origin refs/tags/latest-dev
           notes="Newest build of the dev branch, from commit ${GITHUB_SHA::7}. Replaced on every push."
@@ -103,7 +109,7 @@ jobs:
       # Commit the screenshots back to the branch so they can be viewed from a git checkout.
       # Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
       - name: Commit snapshots to branch
-        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' && (steps.visual.outputs.run == 'true') }}
+        if: ${{ github.ref_type == 'branch' && steps.visual.outputs.run == 'true' }}
         run: |
           mkdir -p docs/snapshots
           for png in snapshots/*.png; do
