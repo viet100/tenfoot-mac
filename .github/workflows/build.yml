@@ -13,6 +13,26 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Screenshots, animation recordings and the launch checks take a few minutes, so they
+      # only run when a push changes how the launcher looks (or on a manual run).
+      - name: Check for visual changes
+        id: visual
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          visual='^Sources/TenFoot/(LauncherView|StatusBar|Theme|Game)\.swift$'
+          if [ "$GITHUB_EVENT_NAME" != push ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            run=true
+          elif git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -Eq "$visual"; then
+            run=true
+          else
+            run=false
+          fi
+          echo "Visual change: $run"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
 
       - name: Toolchain
         run: |
@@ -25,10 +45,8 @@ jobs:
       - name: Build app
         run: scripts/build-app.sh
 
-      # Screenshots, animation recordings and the launch checks take a few minutes, so they
-      # only run for visual changes: commits with "[visual]" in the message, or a manual run.
       - name: Render UI snapshots
-        if: ${{ contains(github.event.head_commit.message, '[visual]') || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.visual.outputs.run == 'true' }}
         run: |
           mkdir -p snapshots
           build/TenFoot.app/Contents/MacOS/TenFoot --render-snapshots "$PWD/snapshots" &
@@ -44,7 +62,7 @@ jobs:
           ls -la snapshots
 
       - name: Build animation GIF
-        if: ${{ contains(github.event.head_commit.message, '[visual]') || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.visual.outputs.run == 'true' }}
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --quiet pillow
@@ -76,7 +94,7 @@ jobs:
           gh release upload latest-dev build/TenFoot.zip --clobber
 
       - name: Upload snapshots
-        if: ${{ always() && (contains(github.event.head_commit.message, '[visual]') || github.event_name == 'workflow_dispatch') }}
+        if: ${{ always() && (steps.visual.outputs.run == 'true') }}
         uses: actions/upload-artifact@v5
         with:
           name: ui-snapshots
@@ -85,7 +103,7 @@ jobs:
       # Commit the screenshots back to the branch so they can be viewed from a git checkout.
       # Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
       - name: Commit snapshots to branch
-        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' && (contains(github.event.head_commit.message, '[visual]') || github.event_name == 'workflow_dispatch') }}
+        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' && (steps.visual.outputs.run == 'true') }}
         run: |
           mkdir -p docs/snapshots
           for png in snapshots/*.png; do
