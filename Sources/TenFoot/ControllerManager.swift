@@ -54,6 +54,8 @@ final class ControllerManager: ObservableObject {
     private var buttonsDown: [ObjectIdentifier: Set<String>] = [:]
     /// When Home went down on each controller, and whether holding it has already opened the power menu.
     private var homeHeld: [ObjectIdentifier: (since: TimeInterval, fired: Bool)] = [:]
+    /// A direction held while TenFoot was in the background must be let go before it counts.
+    private var directionNeedsRelease = false
     private var observers: [NSObjectProtocol] = []
     private var timer: Timer?
     private var activity: NSObjectProtocol?
@@ -80,6 +82,7 @@ final class ControllerManager: ObservableObject {
         let connected = Set(GCController.controllers().map(ObjectIdentifier.init))
         axes = axes.filter { connected.contains($0.key) }
         buttonsDown = buttonsDown.filter { connected.contains($0.key) }
+        homeHeld = homeHeld.filter { connected.contains($0.key) }
 
         // Let TenFoot have the Home button while it's in front, rather than the system.
         for controller in GCController.controllers() {
@@ -126,8 +129,17 @@ final class ControllerManager: ObservableObject {
             if x == 0 && y == 0 { (x, y) = (dx, dy) }
             pressed += newlyPressedButtons(of: controller)
         }
+        // Like buttons, a direction already held when TenFoot comes back doesn't move
+        // anything until it's let go.
         if !accepting {
+            directionNeedsRelease = true
+        } else if directionNeedsRelease && x == 0 && y == 0 {
+            directionNeedsRelease = false
+        }
+        if !accepting || directionNeedsRelease {
             (x, y) = (0, 0)
+        }
+        if !accepting {
             // In the background only Home counts, and only while a game is running.
             pressed = watchInBackground && NSApp.modalWindow == nil ? pressed.filter { $0 == .home || $0 == .power } : []
         }

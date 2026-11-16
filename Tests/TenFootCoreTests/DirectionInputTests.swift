@@ -74,4 +74,12 @@ import Testing
         let flipped = axis.direction(for: -0.9)
         #expect(flipped == -1)
     }
+
+    @Test func flickedPastTheMiddleLetsGo() {
+        var axis = StickAxis(pressThreshold: 0.5, releaseThreshold: 0.3)
+        #expect(axis.direction(for: 1.0) == 1)
+        // Read again already partly the other way: no longer right, not yet left.
+        #expect(axis.direction(for: -0.4) == 0)
+        #expect(axis.direction(for: -0.6) == -1)
+    }
 }

@@ -373,8 +373,11 @@ final class LauncherState: ObservableObject {
     /// Back from a game with Home: the home screen with the running game focused.
     func showRunningGame() {
         setLaunching(nil)
+        cancelDrag()
         closePrompt = nil
         optionsMenu = nil
+        powerMenuOpen = false
+        powerConfirm = nil
         messageClear?.cancel()
         message = nil
         screen = .home
@@ -481,7 +484,13 @@ final class LauncherState: ObservableObject {
     func setVisibleCount(_ count: Int) {
         guard count != row.visibleCount else { return }
         row.setVisibleCount(count)
-        scrollIndex = row.firstVisible
+        if let drag {
+            // Mid-drag the row is wherever the drag scrolled it; keep it there.
+            scrollIndex = min(scrollIndex, max(0, games.count - row.visibleCount))
+            moveDrag(to: drag.target)
+        } else {
+            scrollIndex = row.firstVisible
+        }
     }
 
     private func moveGames(by delta: Int) {
@@ -533,13 +542,21 @@ final class LauncherState: ObservableObject {
         }
     }
 
+    /// Moves focus in the options menu, skipping items that can't be picked.
+    private func moveOptionsFocus(by delta: Int) {
+        let items = OptionsItem.allCases
+        var index = optionsIndex + delta
+        while items.indices.contains(index), !isAvailable(items[index]) { index += delta }
+        guard items.indices.contains(index) else { return }
+        withAnimation(Theme.selectorAnimation) { optionsIndex = index }
+    }
+
     private func handleOptions(_ action: InputAction) {
-        let last = OptionsItem.allCases.count - 1
         switch action {
         case .up:
-            withAnimation(Theme.selectorAnimation) { optionsIndex = max(0, optionsIndex - 1) }
+            moveOptionsFocus(by: -1)
         case .down:
-            withAnimation(Theme.selectorAnimation) { optionsIndex = min(last, optionsIndex + 1) }
+            moveOptionsFocus(by: 1)
         case .confirm:
             pick(OptionsItem.allCases[optionsIndex])
         case .back, .home, .options:
@@ -665,27 +682,45 @@ final class LauncherState: ObservableObject {
     /// While the pointer is at the left (-1) or right (1) edge of the screen, the row
     /// keeps scrolling that way with the dragged game; 0 stops it.
     func setDragEdge(_ direction: Int) {
+        let direction = drag == nil ? 0 : direction
         guard direction != dragScrollDirection else { return }
         dragScrollDirection = direction
         dragScroll?.cancel()
         dragScroll = nil
-        guard direction != 0, drag != nil else { return }
+        guard direction != 0 else { return }
         dragScroll = Task { [weak self] in
             while !Task.isCancelled {
-                self?.scrollDrag()
+                guard let self else { return }
+                self.scrollDrag()
                 try? await Task.sleep(for: .seconds(Theme.dragScrollInterval * Theme.motionScale))
             }
         }
     }
 
+    /// Scrolls one step towards the edge the pointer is at, and holds the game over the
+    /// slot at that edge (even when the row can't scroll any further).
     private func scrollDrag() {
         guard var next = drag else { return }
         let lastFirst = max(0, games.count - row.visibleCount)
         let first = min(max(scrollIndex + dragScrollDirection, 0), lastFirst)
-        guard first != scrollIndex else { return }
-        withAnimation(Theme.dragScrollAnimation) { scrollIndex = first }
+        if first != scrollIndex {
+            withAnimation(Theme.dragScrollAnimation) { scrollIndex = first }
+        }
         next.target = dragScrollDirection > 0 ? min(first + row.visibleCount, games.count) - 1 : first
+        guard next != drag else { return }
         withAnimation(Theme.reorderAnimation) { drag = next }
+    }
+
+    /// Puts a dragged game back where it was, without saving: the mouse button was let
+    /// go somewhere TenFoot didn't see (another app came to the front mid-drag).
+    func cancelDrag() {
+        setDragEdge(0)
+        guard drag != nil else { return }
+        trace?("drag cancelled")
+        withAnimation(Theme.reorderAnimation) {
+            drag = nil
+            scrollIndex = row.firstVisible
+        }
     }
 
     /// Drops the dragged game where it's held, saves the new order and focuses it.

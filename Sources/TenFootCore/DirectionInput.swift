@@ -48,7 +48,8 @@ public struct StickAxis: Sendable {
             current = 1
         } else if value <= -pressThreshold {
             current = -1
-        } else if abs(value) < releaseThreshold {
+        } else if abs(value) < releaseThreshold || (current != 0 && (value < 0) != (current < 0)) {
+            // Back near the middle, or already partly the other way (a quick flick across).
             current = 0
         }
         return current

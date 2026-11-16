@@ -13,7 +13,11 @@ struct Layout {
     var spacing: CGFloat { unit * Theme.tileSpacing }  // gap between tiles
     var step: CGFloat { cell + spacing }               // distance from one tile to the next
     var margin: CGFloat { unit * Theme.sideMargin }
-    var visibleCount: Int { max(1, Int((size.width - margin * 2 - tile) / step) + 1) }
+    var visibleCount: Int {
+        // A window with no size yet (or a display being reconfigured) fits one tile.
+        guard step > 0, size.width.isFinite else { return 1 }
+        return max(1, Int((size.width - margin * 2 - tile) / step) + 1)
+    }
 }
 
 /// The whole launcher: backdrop, the current screen, status bar and hints.
@@ -243,6 +247,7 @@ extension Layout {
     /// The game whose tile covers `x` across the screen, if any (not the gaps between tiles).
     func game(atX x: CGFloat, scrollIndex: Int, count: Int) -> Int? {
         let intoRow = x - rowOrigin(scrollIndex: scrollIndex)
+        guard step > 0, intoRow.isFinite else { return nil }
         let slot = Int((intoRow / step).rounded(.down))
         let intoCell = intoRow - CGFloat(slot) * step
         guard (0..<count).contains(slot), intoCell >= rim, intoCell <= rim + tile else { return nil }
@@ -251,7 +256,9 @@ extension Layout {
 
     /// The slot nearest to a point `x` across the screen.
     func slot(atX x: CGFloat, scrollIndex: Int) -> Int {
-        Int(((x - rowOrigin(scrollIndex: scrollIndex) - cell / 2) / step).rounded())
+        let slot = ((x - rowOrigin(scrollIndex: scrollIndex) - cell / 2) / step).rounded()
+        guard step > 0, slot.isFinite else { return scrollIndex }
+        return Int(slot)
     }
 }
 
@@ -336,7 +343,6 @@ private struct TileRow: View {
                     // The dragged game's own tile waits, invisible, in the slot it will drop into.
                     .opacity(state.drag?.id == game.id ? 0 : 1)
                     .frame(width: layout.cell, height: layout.cell)
-                    .contentShape(selectorShape.inset(by: rim)) // the tile is what you can click, not the rim
                     .offset(x: CGFloat(state.slot(of: index)) * layout.step)
             }
 

@@ -118,7 +118,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Once the game is in front (TenFoot steps back), its tile stops showing the spinner.
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
                                                queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.state.setLaunching(nil) }
+            MainActor.assumeIsolated {
+                self?.state.setLaunching(nil)
+                // A drag whose mouse-up went to another app would otherwise never end.
+                self?.state.cancelDrag()
+            }
         }
 
         if let snapshotDir {
