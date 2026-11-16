@@ -1,0 +1,76 @@
+/// Decides which running processes belong to a launched game, and when the game
+/// has finished so the launcher can come back.
+///
+/// A game isn't always one process. A CrossOver launcher starts Wine processes and
+/// may quit straight away; a script may start the real app and exit. So the session
+/// takes in:
+/// - any Wine/CrossOver app that starts while it's running, and
+/// - any other app that starts shortly after the game was launched, or shortly
+///   after one of its processes quit (a hand-off).
+///
+/// It's over once none of those are running and nothing has taken over for a short
+/// grace period. Times are in seconds.
+public struct GameSession: Sendable {
+    public struct Timing: Sendable {
+        /// Other apps starting this soon after launch (or after a game process quits) count as the game.
+        public var handoffWindow: Double = 10
+        /// Wait this long after the last game process quits before returning.
+        public var quitGrace: Double = 2
+        /// How long to wait for anything to show up after launch.
+        public var startGrace: Double = 10
+        /// CrossOver games can take a while to start Wine; wait longer for it.
+        public var wineStartGrace: Double = 30
+
+        public init() {}
+    }
+
+    public private(set) var processes: Set<Int32> = []
+    public let expectsWine: Bool
+    public var timing: Timing
+
+    private var sawWine = false
+    private var trackedAnything = false
+    private var lastChange: Double
+
+    public init(expectsWine: Bool, at now: Double, timing: Timing = Timing()) {
+        self.expectsWine = expectsWine
+        self.timing = timing
+        lastChange = now
+    }
+
+    /// The process TenFoot itself started (or the app it opened).
+    public mutating func track(_ pid: Int32, at now: Double) {
+        processes.insert(pid)
+        trackedAnything = true
+    }
+
+    /// Another app started while the session is running. Returns true if it's
+    /// counted as part of the game.
+    @discardableResult
+    public mutating func appLaunched(_ pid: Int32, isWine: Bool, at now: Double) -> Bool {
+        guard isWine || now - lastChange <= timing.handoffWindow else { return false }
+        if isWine { sawWine = true }
+        track(pid, at: now)
+        return true
+    }
+
+    /// A process quit (pids that aren't part of the game are ignored).
+    public mutating func processQuit(_ pid: Int32, at now: Double) {
+        guard processes.remove(pid) != nil else { return }
+        lastChange = now
+    }
+
+    /// True once the game has finished and the launcher should come back.
+    public func isOver(at now: Double) -> Bool {
+        guard processes.isEmpty else { return false }
+        let grace: Double
+        if expectsWine && !sawWine {
+            grace = timing.wineStartGrace
+        } else if !trackedAnything {
+            grace = timing.startGrace
+        } else {
+            grace = timing.quitGrace
+        }
+        return now - lastChange >= grace
+    }
+}

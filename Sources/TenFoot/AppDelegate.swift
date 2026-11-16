@@ -13,6 +13,7 @@ final class LauncherWindow: NSWindow {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var state: LauncherState!
     private var controllers: ControllerManager?
+    private let launcher = GameLauncher()
     private var window: LauncherWindow?
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
@@ -58,6 +59,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.presentAddAppPanel() }
         }
 
+        state.onLaunch = { [weak self] game in self?.launch(game) }
+
         let controllers = ControllerManager { [weak self] action in self?.state.handle(action) }
         self.controllers = controllers
         let hosting = NSHostingView(rootView: LauncherView(state: state, status: status, controllers: controllers))
@@ -85,6 +88,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    // MARK: - Games
+
+    /// Opens the game; when it has quit, TenFoot comes back to the front.
+    private func launch(_ game: Game) {
+        state.show(message: "Starting \(game.title)…", for: 6)
+        launcher.launch(game, onFailure: { [weak self] message in
+            self?.state.show(message: message, for: 6)
+        }, onFinished: { [weak self] in
+            self?.returnToLauncher()
+        })
+    }
+
+    private func returnToLauncher() {
+        NSApp.unhide(nil)
+        NSApp.activate()
+        window?.makeKeyAndOrderFront(nil)
+        NSCursor.setHiddenUntilMouseMoves(true)
     }
 
     // MARK: - Add App
@@ -220,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.handle(.up)
 
         await recordSlide(of: window, to: directory.appendingPathComponent("slide", isDirectory: true))
+        await checkLaunchAndReturn(window: window, directory: directory)
         NSApp.terminate(nil)
     }
 
@@ -262,6 +285,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let manifest = "slowdown\t\(slowdown)\n" + lines.joined(separator: "\n") + "\n"
         try? manifest.write(to: directory.appendingPathComponent("frames.tsv"), atomically: true, encoding: .utf8)
         Theme.motionScale = 1
+    }
+
+    /// Opens Calculator from the row, quits it, and checks TenFoot comes back to the
+    /// front. The result is printed to the CI log as "LAUNCH CHECK: …".
+    private func checkLaunchAndReturn(window: NSWindow, directory: URL) async {
+        let bundleID = "com.apple.calculator"
+        guard let index = state.games.firstIndex(where: { $0.title == "Calculator" }) else {
+            print("LAUNCH CHECK: Calculator isn't in the sample row")
+            return
+        }
+        state.select(index)
+        try? await Task.sleep(for: .seconds(1))
+        state.handle(.confirm)
+
+        var calculator: NSRunningApplication?
+        for _ in 0..<40 where calculator == nil {
+            try? await Task.sleep(for: .seconds(0.25))
+            calculator = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first
+        }
+        guard let calculator else {
+            print("LAUNCH CHECK: FAILED, Calculator didn't open")
+            return
+        }
+        try? await Task.sleep(for: .seconds(2))
+        let tenFootWasInFront = NSApp.isActive
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("launch-starting.png"))
+
+        calculator.terminate()
+        let quitAt = Date()
+        var returned = false
+        for _ in 0..<60 where !returned {
+            try? await Task.sleep(for: .seconds(0.25))
+            returned = NSApp.isActive && launcher.current == nil
+        }
+        let seconds = String(format: "%.1f", Date().timeIntervalSince(quitAt))
+        print("LAUNCH CHECK: opened Calculator (TenFoot in front while it ran: \(tenFootWasInFront)); "
+              + (returned ? "PASSED, TenFoot came back \(seconds)s after Calculator quit" : "FAILED, TenFoot didn't come back"))
     }
 
     /// Apps every Mac has, standing in for the user's games in CI snapshots.

@@ -57,6 +57,12 @@ final class LauncherState: ObservableObject {
 
     /// Called when the user picks Add App; the app delegate shows the file picker.
     var onAddApp: (() -> Void)?
+    /// Called when the user starts a game.
+    var onLaunch: ((Game) -> Void)?
+
+    /// A short message at the bottom of the screen ("Starting…", or an error).
+    @Published private(set) var message: String?
+    private var messageClear: Task<Void, Never>?
 
     private var library: Library
     private let saves: Bool // false: don't save anything (CI snapshots)
@@ -85,7 +91,7 @@ final class LauncherState: ObservableObject {
 
     var hints: [(HintKind, String)] {
         switch (screen, area) {
-        case (.home, .games): [(.move, "Move")]
+        case (.home, .games): [(.move, "Move"), (.confirm, "Start")]
         case (.home, .system): [(.move, "Move"), (.confirm, "Open")]
         case (.settings, _): [(.move, "Move"), (.confirm, "Select"), (.back, "Back")]
         }
@@ -104,6 +110,8 @@ final class LauncherState: ObservableObject {
         switch (area, action) {
         case (.games, .left): moveGames(by: -1)
         case (.games, .right): moveGames(by: 1)
+        case (.games, .confirm):
+            if let game = focusedGame { onLaunch?(game) }
         case (.games, .down):
             withAnimation(Theme.selectorAnimation) { area = .system }
         case (.system, .up) where !games.isEmpty:
@@ -147,9 +155,13 @@ final class LauncherState: ObservableObject {
 
     // MARK: - Mouse and trackpad
 
-    /// Clicking a game focuses it.
+    /// Clicking a game focuses it; clicking the focused game starts it.
     func click(game index: Int) {
         guard screen == .home, games.indices.contains(index) else { return }
+        if area == .games && index == focusIndex {
+            onLaunch?(games[index])
+            return
+        }
         if area != .games {
             withAnimation(Theme.selectorAnimation) { area = .games }
         }
@@ -264,6 +276,19 @@ final class LauncherState: ObservableObject {
         withAnimation(Theme.screenAnimation) {
             screen = .home
             area = .games
+        }
+    }
+
+    // MARK: - Messages
+
+    /// Shows `text` at the bottom of the screen for a few seconds.
+    func show(message text: String, for seconds: Double = 4) {
+        messageClear?.cancel()
+        withAnimation(Theme.screenAnimation) { message = text }
+        messageClear = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            withAnimation(Theme.screenAnimation) { self?.message = nil }
         }
     }
 

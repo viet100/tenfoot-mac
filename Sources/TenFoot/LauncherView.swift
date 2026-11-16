@@ -39,6 +39,13 @@ struct LauncherView: View {
                     .padding(layout.unit * Theme.statusMargin)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
 
+                if let message = state.message {
+                    MessageBanner(text: message, unit: layout.unit)
+                        .padding(layout.unit * Theme.hintMargin)
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomLeading)
+                        .transition(.opacity)
+                }
+
                 HintBar(state: state, controllers: controllers, unit: layout.unit)
                     .padding(layout.unit * Theme.hintMargin)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
@@ -296,6 +303,24 @@ private struct Backdrop: View {
             .overlay(Color.black.opacity(Theme.backdropDim))
             .animation(Theme.backdropAnimation, value: game?.id)
             .ignoresSafeArea()
+    }
+}
+
+/// "Starting…" or an error, in the bottom-left corner.
+private struct MessageBanner: View {
+    let text: String
+    let unit: CGFloat
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: unit * Theme.hintSize, weight: .medium))
+            .foregroundStyle(.white)
+            .lineLimit(2)
+            .frame(maxWidth: unit * 0.9, alignment: .leading)
+            .padding(.horizontal, unit * 0.03)
+            .padding(.vertical, unit * 0.016)
+            .glassEffect(.regular, in: Capsule())
+            .allowsHitTesting(false)
     }
 }
 

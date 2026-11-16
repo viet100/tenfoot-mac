@@ -4,7 +4,7 @@ An app launcher for running all your macOS games and apps, inspired by video gam
 TenFoot opens fullscreen and gives you a console-style home menu built for a TV and a game controller. It only runs while you have it open.
 
 ## Status
-Done so far: the home screen, controller navigation, and a Settings screen where you add your own apps. Launching games comes next.
+Done so far: the home screen, controller navigation, a Settings screen where you add your own apps, and launching games. When a game quits, TenFoot comes back.
 
 ## Try it
 1. Download the newest build: https://github.com/viet100/tenfoot-mac/releases/download/latest-dev/TenFoot.zip. The link stays the same and always has the latest version of the `dev` branch.
@@ -13,7 +13,7 @@ Done so far: the home screen, controller navigation, and a Settings screen where
    ```bash
    xattr -dr com.apple.quarantine /Applications/TenFoot.app
    ```
-4. Move with the d-pad, stick or arrow keys. **A** (or Return) selects, **B** (or Esc) goes back, and **⌘Q** exits. With a mouse or trackpad, click to select and scroll or swipe to move along the row. The Dock and menu bar come back when you quit.
+4. Move with the d-pad, stick or arrow keys. **A** (or Return) selects or starts a game, **B** (or Esc) goes back, and **⌘Q** exits. With a mouse or trackpad, click to select and scroll or swipe to move along the row. The Dock and menu bar come back when you quit.
 5. To add your games, go down to the **Settings** button, open it, and choose **Add App**. Pick any apps or programs (you can select several at once). They show up on the home screen and are remembered next time, in `~/Library/Application Support/TenFoot/library.json`.
 6. If your Mac uses the Clear, Tinted or Dark icon style, **Settings → Icon Style → Full Colour** shows each app's own colour icon instead. Apps that don't include a separate icon file keep the macOS version.
 
