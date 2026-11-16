@@ -102,11 +102,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         })
     }
 
+    /// Brings TenFoot back to the front. Since macOS 14 an app in the background
+    /// can't always activate itself, so it also asks Launch Services to open TenFoot,
+    /// which brings the running copy forward like clicking it in the Dock.
     private func returnToLauncher() {
         NSApp.unhide(nil)
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
         NSCursor.setHiddenUntilMouseMoves(true)
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            if let error { print("Couldn't bring TenFoot forward: \(error)") }
+        }
     }
 
     // MARK: - Add App
@@ -312,12 +321,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let tenFootWasInFront = NSApp.isActive
         Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("launch-starting.png"))
 
+        func describe(_ pids: Set<Int32>) -> String {
+            pids.map { pid in "\(pid):\(NSRunningApplication(processIdentifier: pid)?.localizedName ?? "?")" }
+                .sorted().joined(separator: ", ")
+        }
+        print("LAUNCH CHECK: Calculator is pid \(calculator.processIdentifier); tracking [\(describe(launcher.trackedProcesses))]")
+
         calculator.terminate()
         let quitAt = Date()
         var returned = false
-        for _ in 0..<60 where !returned {
+        for step in 0..<60 where !returned {
             try? await Task.sleep(for: .seconds(0.25))
             returned = NSApp.isActive && launcher.current == nil
+            if step % 4 == 3 {
+                let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "none"
+                print("LAUNCH CHECK: +\((step + 1) / 4)s game finished: \(launcher.current == nil), "
+                      + "TenFoot active: \(NSApp.isActive), frontmost: \(front), tracking [\(describe(launcher.trackedProcesses))]")
+            }
         }
         let seconds = String(format: "%.1f", Date().timeIntervalSince(quitAt))
         print("LAUNCH CHECK: opened Calculator (TenFoot in front while it ran: \(tenFootWasInFront)); "

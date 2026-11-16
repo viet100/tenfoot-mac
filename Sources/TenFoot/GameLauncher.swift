@@ -12,6 +12,9 @@ final class GameLauncher {
     /// The game being played, if any.
     private(set) var current: Game?
 
+    /// Processes currently counted as the game (for diagnostics).
+    var trackedProcesses: Set<Int32> { session?.processes ?? [] }
+
     private var session: GameSession?
     private var onFinished: (() -> Void)?
     private var knownApps: Set<Int32> = []
