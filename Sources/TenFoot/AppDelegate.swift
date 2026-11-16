@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
     private var scrollAmount: CGFloat = 0
+    private var mouseViaSystem = false // CI drag check: post system-wide mouse events
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
@@ -358,23 +359,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         func titles() -> String { state.games.map(\.title).joined(separator: ", ") }
         func center(_ slot: Int) -> CGPoint { layout.tileCenter(slot: slot, scrollIndex: state.scrollIndex) }
 
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
         state.select(0)
         try? await Task.sleep(for: .seconds(1))
-        print("DRAG CHECK: before: \(titles())")
+        let hit = window.contentView?.hitTest(NSPoint(x: center(1).x, y: size.height - center(1).y))
+        print("DRAG CHECK: before: \(titles()); TenFoot active: \(NSApp.isActive), key window: \(window.isKeyWindow), "
+              + "view under the second tile: \(hit.map { String(describing: type(of: $0)) } ?? "none")")
 
-        // Stills: the second game picked up and held over the fourth slot.
-        let moved = state.games[1].title
-        let hold = center(3).moved(30, -25)
-        sendMouse(.leftMouseDown, at: center(1), in: window)
-        await dragMouse(from: center(1), to: hold, seconds: 0.5, in: window)
-        try? await Task.sleep(for: .seconds(1))
-        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-drag.png"))
-        sendMouse(.leftMouseUp, at: hold, in: window)
-        try? await Task.sleep(for: .seconds(1))
-        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-dropped.png"))
-        let landed = state.games.firstIndex { $0.title == moved }
-        print("DRAG CHECK: after dropping \(moved) on slot 3: \(titles()); "
-              + (landed == 3 && state.drag == nil ? "PASSED" : "FAILED, it's at \(landed.map(String.init) ?? "nowhere")"))
+        // Mouse events sent through the app first; if those don't reach the gestures,
+        // system-wide events (which also move the real pointer).
+        for viaSystem in [false, true] {
+            mouseViaSystem = viaSystem
+            let how = viaSystem ? "system events" : "app events"
+
+            // A plain click on the third game should focus it.
+            sendMouse(.leftMouseDown, at: center(2), in: window)
+            try? await Task.sleep(for: .seconds(0.05))
+            sendMouse(.leftMouseUp, at: center(2), in: window)
+            try? await Task.sleep(for: .seconds(0.8))
+            print("DRAG CHECK [\(how)]: clicking the third game focused it: \(state.focusIndex == 2)")
+            state.select(0)
+            try? await Task.sleep(for: .seconds(0.8))
+
+            // Stills: the second game picked up and held over the fourth slot.
+            let moved = state.games[1].title
+            let hold = center(3).moved(30, -25)
+            sendMouse(.leftMouseDown, at: center(1), in: window)
+            await dragMouse(from: center(1), to: hold, seconds: 0.5, in: window)
+            try? await Task.sleep(for: .seconds(1))
+            let pickedUp = state.drag != nil
+            print("DRAG CHECK [\(how)]: mid-drag: picked up: \(pickedUp), "
+                  + "held over slot: \(state.drag.map { String($0.target) } ?? "-")")
+            Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-drag.png"))
+            sendMouse(.leftMouseUp, at: hold, in: window)
+            try? await Task.sleep(for: .seconds(1))
+            Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("home-dropped.png"))
+            let landed = state.games.firstIndex { $0.title == moved }
+            print("DRAG CHECK [\(how)]: after dropping \(moved) on slot 3: \(titles()); "
+                  + (landed == 3 && state.drag == nil ? "PASSED" : "FAILED, it's at \(landed.map(String.init) ?? "nowhere")"))
+            if pickedUp { break }
+        }
 
         // GIF: drag the first game two places right; then take the third one to the right
         // edge and hold it there while the row scrolls.
@@ -403,12 +428,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Sends a mouse event to the window at `point` (top-left origin, like SwiftUI).
     private func sendMouse(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow) {
         let height = window.contentView?.bounds.height ?? 0
+        if mouseViaSystem {
+            // Window point → AppKit screen point (bottom-left origin) → CG global point (top-left origin).
+            let screenY = window.frame.maxY - point.y
+            let primaryHeight = NSScreen.screens.first?.frame.height ?? height
+            let global = CGPoint(x: window.frame.minX + point.x, y: primaryHeight - screenY)
+            let cgType: CGEventType = switch type {
+            case .leftMouseDown: .leftMouseDown
+            case .leftMouseUp: .leftMouseUp
+            default: .leftMouseDragged
+            }
+            CGEvent(mouseEventSource: nil, mouseType: cgType, mouseCursorPosition: global, mouseButton: .left)?
+                .post(tap: .cghidEventTap)
+            return
+        }
         guard let event = NSEvent.mouseEvent(
             with: type, location: NSPoint(x: point.x, y: height - point.y), modifierFlags: [],
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
             eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1
         ) else { return }
-        window.sendEvent(event)
+        // Through the app, the way real mouse events arrive.
+        NSApp.sendEvent(event)
     }
 
     /// Moves a held mouse button from `start` to `end` over `seconds`, easing in and out.
