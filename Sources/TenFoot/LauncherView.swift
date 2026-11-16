@@ -516,7 +516,6 @@ private struct SettingsScreen: View {
 
             VStack(spacing: unit * 0.014) {
                 ForEach(Array(LauncherState.SettingsItem.allCases.enumerated()), id: \.element) { index, item in
-                    let _ = print("ROW DEBUG: settings list drawn, addingApps: \(state.addingApps)") // TEMP
                     SettingsRow(item: item, value: value(of: item), focused: index == state.settingsIndex,
                                 pressed: item == .addApp && state.addingApps, unit: unit)
                         .contentShape(Rectangle())
@@ -557,7 +556,6 @@ private struct SettingsRow: View {
         // Pressed, the glass draws in by `inset` on every side while the row keeps its
         // height (scaling doesn't apply to glass), so the rows below stay put.
         let inset = pressed ? unit * Theme.rowPressInset : 0
-        let _ = print("ROW DEBUG: \(item) drawn, pressed: \(pressed), focused: \(focused)") // TEMP
         HStack(spacing: unit * 0.024) {
             Image(systemName: item.symbol)
                 .font(.system(size: unit * 0.034, weight: .semibold)) // same weight as the row's title
