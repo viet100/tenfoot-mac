@@ -13,7 +13,6 @@ final class StatusModel: ObservableObject {
     struct WiFi: Equatable {
         var poweredOn: Bool
         var connected: Bool
-        var name: String?    // nil unless macOS grants Location access, which TenFoot doesn't request
         var strength: Double // 0...1
     }
 
@@ -35,7 +34,7 @@ final class StatusModel: ObservableObject {
     /// Fixed values used when rendering CI snapshots (the CI machine has no battery or Wi‑Fi).
     init(sample: Void) {
         battery = Battery(percent: 82, charging: false)
-        wifi = WiFi(poweredOn: true, connected: true, name: "Home", strength: 1)
+        wifi = WiFi(poweredOn: true, connected: true, strength: 1)
         fixedDate = Calendar.current.date(bySettingHour: 21, minute: 41, second: 0, of: Date())
     }
 
@@ -68,7 +67,7 @@ final class StatusModel: ObservableObject {
         let connected = poweredOn && rssi != 0
         // Map roughly -90 dBm (weak) ... -50 dBm (strong) to 0...1.
         let strength = connected ? min(1, max(0, Double(rssi + 90) / 40)) : 0
-        return WiFi(poweredOn: poweredOn, connected: connected, name: interface.ssid(), strength: strength)
+        return WiFi(poweredOn: poweredOn, connected: connected, strength: strength)
     }
 }
 
@@ -106,14 +105,13 @@ struct StatusBar: View {
         }
     }
 
+    /// Icon only: signal strength when connected, slashed when off or disconnected.
+    @ViewBuilder
     private func wifiItem(_ wifi: StatusModel.WiFi) -> some View {
-        HStack(spacing: unit * 0.01) {
-            if wifi.connected {
-                Image(systemName: "wifi", variableValue: wifi.strength)
-            } else {
-                Image(systemName: "wifi.slash")
-            }
-            Text(wifi.connected ? (wifi.name ?? "Wi‑Fi") : (wifi.poweredOn ? "Not Connected" : "Wi‑Fi Off"))
+        if wifi.connected {
+            Image(systemName: "wifi", variableValue: wifi.strength)
+        } else {
+            Image(systemName: "wifi.slash")
         }
     }
 
