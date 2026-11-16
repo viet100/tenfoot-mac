@@ -574,6 +574,8 @@ struct BlurText: View {
 private struct Backdrop: View {
     let game: Game?
 
+    private static func dark(_ color: Color, _ amount: Double) -> Color { color.mix(with: .black, by: amount) }
+
     /// Blues and purples, before any game is focused.
     private static let defaultPalette: [Color] = [
         Color(red: 0.2, green: 0.3, blue: 0.5), Color(red: 0.25, green: 0.15, blue: 0.4),
@@ -590,7 +592,7 @@ private struct Backdrop: View {
         // The icon's four main colours, spread over the screen: brightest along the top,
         // only partly darkened along the bottom so the colour carries all the way down.
         let p = game?.palette ?? Self.defaultPalette
-        func dark(_ color: Color, _ amount: Double) -> Color { color.mix(with: .black, by: amount) }
+        let dark = Self.dark
         let colors: [Color] = [
             p[0], p[0].mix(with: p[1], by: 0.5), p[1],
             dark(p[2], 0.15), dark(p[0].mix(with: p[3], by: 0.5), 0.2), dark(p[3], 0.15),
