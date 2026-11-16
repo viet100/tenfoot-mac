@@ -22,9 +22,11 @@ import Testing
         var library = Library()
         for name in ["A", "B", "C"] { library.add(path: "/Applications/\(name).app", title: name) }
         let b = library.entries[1]
-        #expect(library.remove(id: b.id))
+        let removed = library.remove(id: b.id)
+        #expect(removed)
         #expect(library.entries.map(\.title) == ["A", "C"])
-        #expect(library.remove(id: b.id) == false) // already gone
+        let removedAgain = library.remove(id: b.id) // already gone
+        #expect(!removedAgain)
         #expect(library.entries.map(\.title) == ["A", "C"])
     }
 
