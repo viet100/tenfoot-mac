@@ -621,13 +621,7 @@ final class LauncherState: ObservableObject {
     private func remove(gameID id: UUID) {
         guard id != runningGameID, let index = games.firstIndex(where: { $0.id == id }) else { return }
         library.remove(id: id)
-        if saves {
-            do {
-                try library.save(to: StorageLocation.library)
-            } catch {
-                print("Couldn't save library: \(error)")
-            }
-        }
+        saveLibrary()
         var remaining = games
         remaining.remove(at: index)
         var next = RowFocus(count: remaining.count, visibleCount: row.visibleCount)
@@ -701,13 +695,7 @@ final class LauncherState: ObservableObject {
         guard let drag else { return }
         trace?("dropped game \(drag.from) on slot \(drag.target)")
         library.move(from: drag.from, to: drag.target)
-        if saves {
-            do {
-                try library.save(to: StorageLocation.library)
-            } catch {
-                print("Couldn't save library: \(error)")
-            }
-        }
+        saveLibrary()
         var reordered = games
         reordered.insert(reordered.remove(at: drag.from), at: drag.target)
 
@@ -736,15 +724,9 @@ final class LauncherState: ObservableObject {
         for url in urls {
             lastAdded = library.add(path: url.path, title: Game.title(for: url))
         }
-        if saves {
-            do {
-                try library.save(to: StorageLocation.library)
-            } catch {
-                print("Couldn't save library: \(error)")
-            }
-        }
+        saveLibrary()
 
-        let existing = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
+        let existing = Dictionary(games.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         games = library.entries.map { existing[$0.id] ?? Game(entry: $0, iconStyle: preferences.iconStyle) }
 
         var next = RowFocus(count: games.count, visibleCount: row.visibleCount)
@@ -781,18 +763,34 @@ final class LauncherState: ObservableObject {
         games = library.entries.map { Game(entry: $0, iconStyle: preferences.iconStyle) }
     }
 
+    /// Saves the games list; if that fails, says so on screen (the change only lasts
+    /// until TenFoot quits).
+    private func saveLibrary() {
+        guard saves else { return }
+        do {
+            try library.save(to: StorageLocation.library)
+        } catch {
+            print("Couldn't save library: \(error)")
+            show(message: "Couldn't save your games list: \(error.localizedDescription)", for: 8)
+        }
+    }
+
+    private func savePreferences() {
+        guard saves else { return }
+        do {
+            try preferences.save(to: StorageLocation.preferences)
+        } catch {
+            print("Couldn't save preferences: \(error)")
+            show(message: "Couldn't save your settings: \(error.localizedDescription)", for: 8)
+        }
+    }
+
     /// Switches to the next icon style, reloads every icon and saves the choice.
     private func nextIconStyle() {
         let styles = IconStyle.allCases
         let index = styles.firstIndex(of: preferences.iconStyle) ?? 0
         preferences.iconStyle = styles[(index + 1) % styles.count]
         reloadIcons()
-        if saves {
-            do {
-                try preferences.save(to: StorageLocation.preferences)
-            } catch {
-                print("Couldn't save preferences: \(error)")
-            }
-        }
+        savePreferences()
     }
 }

@@ -49,10 +49,14 @@ public struct Library: Codable, Equatable, Sendable {
         entries.insert(entry, at: to)
     }
 
-    /// Loads the library from `url`; a missing file is an empty library.
+    /// Loads the library from `url`; a missing file is an empty library. An entry
+    /// repeated in the file (by hand-editing) is only kept once.
     public static func load(from url: URL) throws -> Library {
         guard FileManager.default.fileExists(atPath: url.path) else { return Library() }
-        return try JSONDecoder().decode(Library.self, from: Data(contentsOf: url))
+        var library = try JSONDecoder().decode(Library.self, from: Data(contentsOf: url))
+        var seen = Set<UUID>()
+        library.entries = library.entries.filter { seen.insert($0.id).inserted }
+        return library
     }
 
     public func save(to url: URL) throws {

@@ -55,6 +55,17 @@ import Testing
         #expect(loaded == library)
     }
 
+    @Test func repeatedEntriesLoadOnce() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("library.json")
+        let entry = LibraryEntry(title: "Game", path: "/Applications/Game.app")
+        try Library(entries: [entry, entry]).save(to: file)
+
+        let loaded = try Library.load(from: file)
+        #expect(loaded.entries == [entry])
+    }
+
     @Test func missingFileIsEmptyLibrary() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
         let loaded = try Library.load(from: file)

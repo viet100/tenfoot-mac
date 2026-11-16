@@ -24,6 +24,11 @@ import Testing
         #expect(try Preferences.load(from: file) == Preferences())
     }
 
+    @Test func unknownIconStyleGetsDefault() throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"iconStyle": "sparkly"}"#.utf8))
+        #expect(decoded == Preferences())
+    }
+
     @Test func missingSettingGetsDefault() throws {
         let decoded = try JSONDecoder().decode(Preferences.self, from: Data("{}".utf8))
         #expect(decoded == Preferences())

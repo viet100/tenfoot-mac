@@ -42,12 +42,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // CI snapshots start from an empty library and never touch the saved one.
         if snapshotDir == nil {
+            // A file that can't be read is moved aside rather than overwritten by the next save.
+            var problems: [String] = []
             let library: Library
             do {
                 library = try Library.load(from: StorageLocation.library)
             } catch {
                 print("Couldn't read library: \(error)")
                 library = Library()
+                let aside = StoredFile.setAside(StorageLocation.library)
+                problems.append("Couldn't read your games list" + (aside.map { "; it was kept as \($0.lastPathComponent)" } ?? ""))
             }
             let preferences: Preferences
             do {
@@ -55,8 +59,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 print("Couldn't read preferences: \(error)")
                 preferences = Preferences()
+                StoredFile.setAside(StorageLocation.preferences)
+                problems.append("Couldn't read your settings, so they're back to the defaults")
             }
             state = LauncherState(library: library, preferences: preferences, saves: true)
+            if !problems.isEmpty {
+                state.show(message: problems.joined(separator: ". "), for: 15)
+            }
         } else {
             state = LauncherState(library: Library(), preferences: Preferences(), saves: false)
         }

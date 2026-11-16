@@ -19,7 +19,8 @@ public struct Preferences: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        iconStyle = try container.decodeIfPresent(IconStyle.self, forKey: .iconStyle) ?? .matchMacOS
+        // A value this version doesn't know (saved by a newer one) falls back to the default.
+        iconStyle = (try? container.decodeIfPresent(IconStyle.self, forKey: .iconStyle)) ?? .matchMacOS
     }
 
     /// Loads preferences from `url`; a missing file gives the defaults.
