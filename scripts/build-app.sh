@@ -12,8 +12,15 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/TenFoot" "$APP/Contents/MacOS/TenFoot"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
 
-# Ad-hoc signature so macOS will run it locally (not notarized).
-codesign --force --sign - "$APP"
+# Signed with the same certificate every build when one is set up (SIGNING_IDENTITY, from
+# CI's secrets), so macOS keeps TenFoot's Accessibility permission across updates.
+# Otherwise an ad-hoc signature, which macOS treats as a new app every build.
+if [ -n "${SIGNING_IDENTITY:-}" ]; then
+  codesign --force --sign "$SIGNING_IDENTITY" ${SIGNING_KEYCHAIN:+--keychain "$SIGNING_KEYCHAIN"} "$APP"
+else
+  codesign --force --sign - "$APP"
+fi
+codesign --display --requirements - "$APP"
 
 (cd build && ditto -c -k --keepParent TenFoot.app TenFoot.zip)
 echo "Built $APP and build/TenFoot.zip"
