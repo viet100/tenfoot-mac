@@ -388,12 +388,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Settings → Add App, held pressed as if the file picker were open (the real
         // picker would stop the run).
         state.handle(.confirm)
+        try? await Task.sleep(for: .seconds(1)) // Settings is up before A is pressed, as for a person
         let addApp = state.onAddApp
         state.onAddApp = nil
         state.handle(.confirm)
-        // CI only: the app isn't in front here, and SwiftUI doesn't always draw until
-        // something asks; the first capture asks, so the second shows the pressed row.
-        await capture("settings-add-app-pressed")
         await capture("settings-add-app-pressed")
         print("ADD APP CHECK: row held pressed while the picker is open: \(state.addingApps), on \(state.screen)")
         state.finishAddingApps()
