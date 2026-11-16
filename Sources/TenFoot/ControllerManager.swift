@@ -2,32 +2,39 @@ import AppKit
 import GameController
 import TenFootCore
 
-/// Reads every connected game controller and turns left/right on the d-pad or
-/// left stick into focus moves, with hold-to-repeat.
+/// Reads every connected game controller and turns it into `InputAction`s:
+/// the d-pad or left stick moves (with hold-to-repeat), A confirms, B goes back.
 ///
 /// Works the same for DualShock/DualSense, Xbox, Switch Pro, a Joy-Con pair and a
 /// single sideways Joy-Con: all of them are read through GameController's generic
 /// `physicalInputProfile`, and GameController already reports a single Joy-Con's
-/// stick in its sideways orientation.
+/// stick in its sideways orientation. "A" and "B" are each controller's own
+/// confirm and back buttons (on Nintendo controllers A is the right-hand button).
 ///
 /// Controllers only deliver input while TenFoot is the frontmost app, so nothing is
 /// read once you switch away or quit.
 @MainActor
 final class ControllerManager: ObservableObject {
-    static let keyboardMoveSymbol = "arrow.left.arrow.right"
+    static let keyboardMoveSymbol = "arrow.up.and.down.and.arrow.left.and.right"
+    static let keyboardConfirmSymbol = "return"
+    static let keyboardBackSymbol = "escape"
 
-    /// Symbol for the "Move" hint: the connected controller's own d-pad or stick glyph,
-    /// or keyboard arrows when no controller is connected.
+    /// Glyphs for the hint bar: the connected controller's own d-pad, A and B,
+    /// or keyboard keys when no controller is connected.
     @Published private(set) var moveSymbol = ControllerManager.keyboardMoveSymbol
+    @Published private(set) var confirmSymbol = ControllerManager.keyboardConfirmSymbol
+    @Published private(set) var backSymbol = ControllerManager.keyboardBackSymbol
 
-    private let onMove: (Int) -> Void
-    private var repeatFilter = RepeatFilter(initialDelay: Theme.repeatDelay, interval: Theme.repeatInterval)
-    private var axes: [ObjectIdentifier: [String: StickAxis]] = [:]
+    private let onAction: (InputAction) -> Void
+    private var horizontal = RepeatFilter(initialDelay: Theme.repeatDelay, interval: Theme.repeatInterval)
+    private var vertical = RepeatFilter(initialDelay: Theme.repeatDelay, interval: Theme.repeatInterval)
+    private var axes: [ObjectIdentifier: [String: (x: StickAxis, y: StickAxis)]] = [:]
+    private var buttonsDown: [ObjectIdentifier: Set<String>] = [:]
     private var observers: [NSObjectProtocol] = []
     private var timer: Timer?
 
-    init(onMove: @escaping (Int) -> Void) {
-        self.onMove = onMove
+    init(onAction: @escaping (InputAction) -> Void) {
+        self.onAction = onAction
 
         let names: [Notification.Name] = [.GCControllerDidConnect, .GCControllerDidDisconnect, .GCControllerDidBecomeCurrent]
         for name in names {
@@ -45,39 +52,75 @@ final class ControllerManager: ObservableObject {
     private func controllersChanged() {
         let connected = Set(GCController.controllers().map(ObjectIdentifier.init))
         axes = axes.filter { connected.contains($0.key) }
-        moveSymbol = (GCController.current ?? GCController.controllers().first).map(Self.moveSymbol(for:))
-            ?? Self.keyboardMoveSymbol
+        buttonsDown = buttonsDown.filter { connected.contains($0.key) }
+
+        let controller = GCController.current ?? GCController.controllers().first
+        let profile = controller?.physicalInputProfile
+        let pads = profile?.dpads ?? [:]
+        let pad = pads[GCInputDirectionPad] ?? pads[GCInputLeftThumbstick] ?? pads.values.first
+        moveSymbol = controller == nil ? Self.keyboardMoveSymbol : (pad?.sfSymbolsName ?? "gamecontroller")
+        confirmSymbol = profile?.buttons[GCInputButtonA]?.sfSymbolsName ?? Self.keyboardConfirmSymbol
+        backSymbol = profile?.buttons[GCInputButtonB]?.sfSymbolsName ?? Self.keyboardBackSymbol
     }
 
     private func poll() {
-        var direction = 0
-        if NSApp.isActive {
-            for controller in GCController.controllers() {
-                let d = horizontalDirection(of: controller)
-                if d != 0 {
-                    direction = d
-                    break
-                }
-            }
+        // Button and stick state is always tracked, so a button that is already held
+        // when TenFoot comes back to the front (or a file picker closes) doesn't fire.
+        let accepting = NSApp.isActive && NSApp.modalWindow == nil
+        var x = 0, y = 0
+        var pressed: [InputAction] = []
+
+        for controller in GCController.controllers() {
+            let (dx, dy) = direction(of: controller)
+            if x == 0 && y == 0 { (x, y) = (dx, dy) }
+            pressed += newlyPressedButtons(of: controller)
         }
-        let move = repeatFilter.update(direction: direction, at: ProcessInfo.processInfo.systemUptime)
-        if move != 0 { onMove(move) }
+        if !accepting {
+            (x, y) = (0, 0)
+            pressed = []
+        }
+
+        // Horizontal wins when both are held, so a diagonal stick still moves along the row.
+        let now = ProcessInfo.processInfo.systemUptime
+        let moveX = horizontal.update(direction: x, at: now)
+        let moveY = vertical.update(direction: x == 0 ? y : 0, at: now)
+        if moveX != 0 { onAction(moveX < 0 ? .left : .right) }
+        if moveY != 0 { onAction(moveY > 0 ? .up : .down) }
+        pressed.forEach(onAction)
     }
 
-    /// Left/right from the controller's d-pad or left stick (-1, 0 or 1).
-    private func horizontalDirection(of controller: GCController) -> Int {
+    /// Direction from the controller's d-pad or left stick: x is -1 left / 1 right,
+    /// y is 1 up / -1 down.
+    private func direction(of controller: GCController) -> (Int, Int) {
         let id = ObjectIdentifier(controller)
         var controllerAxes = axes[id] ?? [:]
-        var direction = 0
+        var x = 0, y = 0
         for (name, pad) in Self.navigationPads(of: controller) {
-            var axis = controllerAxes[name] ?? StickAxis(pressThreshold: Theme.stickPress,
-                                                         releaseThreshold: Theme.stickRelease)
-            let d = axis.direction(for: pad.xAxis.value)
+            var axis = controllerAxes[name] ?? (StickAxis(pressThreshold: Theme.stickPress, releaseThreshold: Theme.stickRelease),
+                                                StickAxis(pressThreshold: Theme.stickPress, releaseThreshold: Theme.stickRelease))
+            let dx = axis.x.direction(for: pad.xAxis.value)
+            let dy = axis.y.direction(for: pad.yAxis.value)
             controllerAxes[name] = axis
-            if direction == 0 { direction = d }
+            if x == 0 && y == 0 { (x, y) = (dx, dy) }
         }
         axes[id] = controllerAxes
-        return direction
+        return (x, y)
+    }
+
+    /// Confirm/back for buttons that went down since the last poll.
+    private func newlyPressedButtons(of controller: GCController) -> [InputAction] {
+        let id = ObjectIdentifier(controller)
+        let buttons = controller.physicalInputProfile.buttons
+        let wasDown = buttonsDown[id] ?? []
+        var down: Set<String> = []
+        var actions: [InputAction] = []
+        for (name, action) in [(GCInputButtonA, InputAction.confirm), (GCInputButtonB, .back)] {
+            guard buttons[name]?.isPressed == true else { continue }
+            down.insert(name)
+            if !wasDown.contains(name) { actions.append(action) }
+        }
+        buttonsDown[id] = down
+        return actions
     }
 
     /// The d-pad and the left stick. A single Joy-Con may name its only stick
@@ -89,11 +132,5 @@ final class ControllerManager: ObservableObject {
             .filter { !(hasLeftStick && $0.key == GCInputRightThumbstick) }
             .sorted { $0.key < $1.key }
             .map { ($0.key, $0.value) }
-    }
-
-    private static func moveSymbol(for controller: GCController) -> String {
-        let pads = controller.physicalInputProfile.dpads
-        let element = pads[GCInputDirectionPad] ?? pads[GCInputLeftThumbstick] ?? pads.values.first
-        return element?.sfSymbolsName ?? "gamecontroller"
     }
 }

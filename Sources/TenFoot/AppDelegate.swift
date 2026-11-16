@@ -1,5 +1,7 @@
 import AppKit
 import SwiftUI
+import TenFootCore
+import UniformTypeIdentifiers
 
 /// A borderless window still needs to accept keyboard focus.
 final class LauncherWindow: NSWindow {
@@ -9,7 +11,7 @@ final class LauncherWindow: NSWindow {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let state = HomeState()
+    private var state: LauncherState!
     private var controllers: ControllerManager?
     private var window: LauncherWindow?
     private var keyMonitor: Any?
@@ -28,9 +30,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.appearance = NSAppearance(named: .darkAqua)
         window.isReleasedWhenClosed = false
         let status = snapshotDir == nil ? StatusModel() : StatusModel(sample: ())
-        let controllers = ControllerManager { [weak self] move in self?.state.move(by: move) }
+
+        // CI snapshots start from an empty library and never touch the saved one.
+        if snapshotDir == nil {
+            let library: Library
+            do {
+                library = try Library.load(from: LibraryLocation.file)
+            } catch {
+                print("Couldn't read library: \(error)")
+                library = Library()
+            }
+            state = LauncherState(library: library, libraryFile: LibraryLocation.file)
+        } else {
+            state = LauncherState(library: Library(), libraryFile: nil)
+        }
+        state.onAddApp = { [weak self] in
+            // Let the current input event finish before the picker takes over.
+            DispatchQueue.main.async { self?.presentAddAppPanel() }
+        }
+
+        let controllers = ControllerManager { [weak self] action in self?.state.handle(action) }
         self.controllers = controllers
-        let hosting = NSHostingView(rootView: HomeView(state: state, status: status, controllers: controllers))
+        let hosting = NSHostingView(rootView: LauncherView(state: state, status: status, controllers: controllers))
         hosting.sizingOptions = []
         window.contentView = hosting
         window.makeKeyAndOrderFront(nil)
@@ -56,23 +77,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    // MARK: - Add App
+
+    /// The standard Mac file picker, for choosing apps or programs to add.
+    private func presentAddAppPanel() {
+        let panel = NSOpenPanel()
+        panel.title = "Add App"
+        panel.message = "Choose apps or programs to put on the TenFoot home screen."
+        panel.prompt = "Add"
+        panel.allowedContentTypes = [.application, .unixExecutable, .executable, .shellScript]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+
+        NSCursor.unhide()
+        let response = panel.runModal()
+        if response == .OK {
+            state.addApps(panel.urls)
+        }
+        window?.makeKeyAndOrderFront(nil)
+        NSCursor.setHiddenUntilMouseMoves(true)
+    }
+
     // MARK: - Input
 
-    /// Temporary keyboard navigation; controller input comes in a later step.
+    /// Arrow keys move, Return selects, Esc goes back. Keys typed into the file
+    /// picker are left alone.
     private func installKeyboardInput() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, !event.modifierFlags.contains(.command) else { return event }
             return MainActor.assumeIsolated {
+                guard event.window === self.window else { return event }
+                let action: InputAction
                 switch event.keyCode {
-                case 123: // left arrow
-                    self.state.move(by: -1)
-                    return nil
-                case 124: // right arrow
-                    self.state.move(by: 1)
-                    return nil
-                default:
-                    return event
+                case 123: action = .left
+                case 124: action = .right
+                case 125: action = .down
+                case 126: action = .up
+                case 36, 76: action = .confirm // Return, keypad Enter
+                case 53: action = .back        // Esc
+                default: return event
                 }
+                self.state.handle(action)
+                return nil
             }
         }
     }
@@ -100,18 +147,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? await Task.sleep(for: .seconds(2))
 
-        // Stills: the selector resting on a tile.
+        func capture(_ name: String) async {
+            try? await Task.sleep(for: .seconds(1.2))
+            Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("\(name).png"))
+            captureViewCache(window.contentView, to: directory.appendingPathComponent("\(name)-viewcache.png"))
+        }
+
+        // First launch: nothing added yet, focus on the Settings button.
+        await capture("home-empty")
+        state.handle(.confirm)
+        await capture("settings")
+
+        // Add some built-in apps the same way the file picker does.
+        state.addApps(Self.sampleApps)
+        await capture("home-added")
+
+        // The selector resting on a tile.
         let shots: [(name: String, focus: Int)] = [
             ("home-first-tile", 0),
             ("home-third-tile", 2),
-            ("home-scrolled", state.games.count - 1),
         ]
         for shot in shots {
             state.select(shot.focus)
-            try? await Task.sleep(for: .seconds(1.2))
-            Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("\(shot.name).png"))
-            captureViewCache(window.contentView, to: directory.appendingPathComponent("\(shot.name)-viewcache.png"))
+            await capture(shot.name)
         }
+        state.handle(.down)
+        await capture("home-settings-button")
+        state.handle(.up)
 
         await recordSlide(of: window, to: directory.appendingPathComponent("slide", isDirectory: true))
         NSApp.terminate(nil)
@@ -146,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         try? await Task.sleep(for: .seconds(1))
         for _ in 0..<7 {
-            state.move(by: 1)
+            state.handle(.right)
             try? await Task.sleep(for: .seconds(moveInterval * slowdown))
         }
         try? await Task.sleep(for: .seconds(3.5))
@@ -157,6 +219,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? manifest.write(to: directory.appendingPathComponent("frames.tsv"), atomically: true, encoding: .utf8)
         Theme.motionScale = 1
     }
+
+    /// Apps every Mac has, standing in for the user's games in CI snapshots.
+    private static let sampleApps: [URL] = [
+        "Chess", "Calculator", "Maps", "Music", "Photos", "Notes", "Weather", "Freeform", "TV", "Podcasts",
+    ].map { URL(fileURLWithPath: "/System/Applications/\($0).app") }
 
     /// Window-server capture: the only way to get Liquid Glass composited as it appears on screen.
     nonisolated private static func captureWindow(_ windowNumber: Int, to url: URL) {

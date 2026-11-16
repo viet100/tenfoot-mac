@@ -12,13 +12,29 @@ enum Theme {
     static let rowCenterY: CGFloat = 0.50        // vertical centre of the row, × height
     static let sideMargin: CGFloat = 0.10        // left edge of the first tile, × height
 
+    static let iconScale: CGFloat = 0.78         // app icon size inside its tile, × tile edge
+
     // Selector (the glass that slides behind the focused tile)
     static let selectorRim: CGFloat = 0.016      // glass visible around the tile, × height
     static let selectorTint: Double = 0.25       // how much of the game's colour tints the glass
 
+    static let focusedGlassTint: Double = 0.22   // white tint on focused buttons and menu rows
+
     // Title of the focused game
     static let titleSize: CGFloat = 0.040        // × height
     static let titleGap: CGFloat = 0.075         // from tile top to title, × height
+
+    // System buttons under the game row (Settings)
+    static let systemButtonSize: CGFloat = 0.085 // × height
+    static let systemRowCenterY: CGFloat = 0.82  // × height
+    static let systemLabelSize: CGFloat = 0.020  // × height
+
+    // Settings screen
+    static let screenTitleSize: CGFloat = 0.050  // × height
+    static let screenTitleTop: CGFloat = 0.12    // × height
+    static let settingsListWidth: CGFloat = 0.90 // × height
+    static let settingsRowSize: CGFloat = 0.030  // × height
+    static let settingsDetailSize: CGFloat = 0.020 // × height
 
     // Hint bar
     static let hintSize: CGFloat = 0.022         // × height
@@ -43,5 +59,6 @@ enum Theme {
     static var motionScale: Double = 1
     static var selectorAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
     static var carouselAnimation: Animation { .smooth(duration: 0.18 * motionScale) }
+    static var screenAnimation: Animation { .smooth(duration: 0.35 * motionScale) }
     static var backdropAnimation: Animation { .easeInOut(duration: 0.60 * motionScale) }
 }
