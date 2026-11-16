@@ -2,15 +2,17 @@ import AppKit
 import SwiftUI
 import TenFootCore
 
-/// A library entry ready to show: its icon and the two colours taken from it
-/// (used for the tile background, the selector tint and the backdrop).
+/// A library entry ready to show: its icon and the colours taken from it
+/// (used for the selector tint and the backdrop).
 struct Game: Identifiable {
     let id: UUID
     let title: String
     let url: URL
     let icon: NSImage
-    let primary: Color
-    let secondary: Color
+    /// Four colours from the icon, strongest first: the backdrop's gradient, and the
+    /// first one tints the selector.
+    let palette: [Color]
+    var primary: Color { palette[0] }
 
     init(entry: LibraryEntry, iconStyle: IconStyle) {
         id = entry.id
@@ -22,7 +24,7 @@ struct Game: Identifiable {
         case .fullColour:
             icon = Self.customIcon(at: url) ?? Self.bundleIcon(at: url) ?? NSWorkspace.shared.icon(forFile: entry.path)
         }
-        (primary, secondary) = Self.colors(of: icon)
+        palette = Self.palette(of: icon)
     }
 
     /// A custom icon set in Finder with Get Info, exactly as it was pasted in. Finder keeps
@@ -63,36 +65,38 @@ struct Game: Identifiable {
         return name
     }
 
-    /// Average colour of the top and bottom halves of the icon.
-    private static func colors(of image: NSImage) -> (Color, Color) {
-        let side = 8
+    /// Four colours picked out of the icon, strongest first. An icon with fewer clear
+    /// colours repeats them in darker shades, so the backdrop still has some range.
+    private static func palette(of image: NSImage) -> [Color] {
+        let picked = IconPalette.colors(rgba: pixels(of: image), count: 4)
+        guard !picked.isEmpty else { return [.gray, .black, .gray, .black] }
+        return (0..<4).map { i in
+            let rgb = picked[i % picked.count]
+            let color = Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
+            let round = i / picked.count // 0 the first time round, then darker
+            return round == 0 ? color : color.mix(with: .black, by: 0.3 * Double(round))
+        }
+    }
+
+    /// The icon drawn small (16 × 16), as RGBA bytes with the alpha taken back out.
+    private static func pixels(of image: NSImage) -> [UInt8] {
+        let side = 16
         var rect = NSRect(x: 0, y: 0, width: 128, height: 128)
         guard let cgImage = image.cgImage(forProposedRect: &rect, context: nil, hints: nil),
               let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
                                       space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return (.gray, .black) }
-
+        else { return [] }
         context.interpolationQuality = .medium
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
-        guard let data = context.data?.assumingMemoryBound(to: UInt8.self) else { return (.gray, .black) }
+        guard let data = context.data?.assumingMemoryBound(to: UInt8.self) else { return [] }
 
-        func average(rows: Range<Int>) -> Color {
-            var red = 0.0, green = 0.0, blue = 0.0, alpha = 0.0
-            for y in rows {
-                for x in 0..<side {
-                    let i = (y * side + x) * 4
-                    red += Double(data[i])
-                    green += Double(data[i + 1])
-                    blue += Double(data[i + 2])
-                    alpha += Double(data[i + 3])
-                }
-            }
-            guard alpha > 0 else { return .gray }
-            // Premultiplied: dividing by total alpha gives the average visible colour.
-            return Color(.sRGB, red: red / alpha, green: green / alpha, blue: blue / alpha)
+        var bytes = Array(UnsafeBufferPointer(start: data, count: side * side * 4))
+        for i in stride(from: 0, to: bytes.count, by: 4) where bytes[i + 3] > 0 {
+            let alpha = Int(bytes[i + 3])
+            for c in 0..<3 { bytes[i + c] = UInt8(min(255, Int(bytes[i + c]) * 255 / alpha)) }
         }
-        return (average(rows: 0..<side / 2), average(rows: side / 2..<side))
+        return bytes
     }
 }
 

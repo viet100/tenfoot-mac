@@ -574,6 +574,12 @@ struct BlurText: View {
 private struct Backdrop: View {
     let game: Game?
 
+    /// Blues and purples, before any game is focused.
+    private static let defaultPalette: [Color] = [
+        Color(red: 0.2, green: 0.3, blue: 0.5), Color(red: 0.25, green: 0.15, blue: 0.4),
+        Color(red: 0.15, green: 0.2, blue: 0.45), Color(red: 0.3, green: 0.2, blue: 0.5),
+    ]
+
     private static let points: [SIMD2<Float>] = [
         [0, 0], [0.5, 0], [1, 0],
         [0, 0.5], [0.55, 0.45], [1, 0.5],
@@ -581,12 +587,14 @@ private struct Backdrop: View {
     ]
 
     var body: some View {
-        let a = game?.primary ?? Color(red: 0.2, green: 0.3, blue: 0.5)
-        let b = game?.secondary ?? Color(red: 0.25, green: 0.15, blue: 0.4)
+        // The icon's four main colours, spread over the screen: brightest along the top,
+        // only partly darkened along the bottom so the colour carries all the way down.
+        let p = game?.palette ?? Self.defaultPalette
+        func dark(_ color: Color, _ amount: Double) -> Color { color.mix(with: .black, by: amount) }
         let colors: [Color] = [
-            a, a.mix(with: b, by: 0.5), b,
-            a.mix(with: .black, by: 0.45), b.mix(with: .black, by: 0.5), a.mix(with: .black, by: 0.65),
-            .black, b.mix(with: .black, by: 0.75), .black,
+            p[0], p[0].mix(with: p[1], by: 0.5), p[1],
+            dark(p[2], 0.15), dark(p[0].mix(with: p[3], by: 0.5), 0.2), dark(p[3], 0.15),
+            dark(p[1], Theme.backdropBottomDarken), dark(p[2], Theme.backdropBottomDarken), dark(p[0], Theme.backdropBottomDarken),
         ]
         MeshGradient(width: 3, height: 3, points: Self.points, colors: colors)
             .overlay(Color.black.opacity(Theme.backdropDim))

@@ -87,7 +87,8 @@ enum Theme {
     static let closeTimeout: Double = 10    // seconds a game gets to quit before it's stopped outright
 
     // Backdrop
-    static let backdropDim: Double = 0.35        // black overlay on the colour mesh
+    static let backdropDim: Double = 0.30        // black overlay on the colour mesh
+    static let backdropBottomDarken: Double = 0.40 // the bottom of the mesh is this much darker (not black)
 
     // Motion. Everything moves on the same smooth curve at one of three speeds, and
     // presses spring back with the same bounce. `motionScale` slows everything down
