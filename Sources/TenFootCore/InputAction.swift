@@ -6,4 +6,5 @@ public enum InputAction: Sendable, Equatable {
     case close   // X on the controller, X on the keyboard: close the running game
     case home    // Home, or − and + together: back to TenFoot from a game
     case options // Y on the controller, Y on the keyboard: the focused game's options
+    case power   // Home held down: the power menu (quit TenFoot, sleep, restart, shut down)
 }

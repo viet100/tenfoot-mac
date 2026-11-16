@@ -24,5 +24,7 @@
 	<string>NSApplication</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>TenFoot asks macOS to restart or shut down when you choose that from the power menu.</string>
 </dict>
 </plist>

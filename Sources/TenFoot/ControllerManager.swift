@@ -5,6 +5,7 @@ import TenFootCore
 /// Reads every connected game controller and turns it into `InputAction`s:
 /// the d-pad or left stick moves (with hold-to-repeat), A confirms, B goes back,
 /// X closes, Y opens a game's options, and Home (or − and + together) goes back to TenFoot from a game.
+/// Holding Home opens the power menu.
 ///
 /// Works the same for DualShock/DualSense, Xbox, Switch Pro, a Joy-Con pair and a
 /// single sideways Joy-Con: all of them are read through GameController's generic
@@ -13,7 +14,7 @@ import TenFootCore
 /// confirm and back buttons (on Nintendo controllers A is the right-hand button).
 ///
 /// Controllers only deliver input while TenFoot is the frontmost app, except while a
-/// game is running: then `watchInBackground` is on, and only Home is acted on.
+/// game is running: then `watchInBackground` is on, and only Home (pressed or held) is acted on.
 @MainActor
 final class ControllerManager: ObservableObject {
     static let keyboardMoveSymbol = "arrow.up.and.down.and.arrow.left.and.right"
@@ -51,6 +52,8 @@ final class ControllerManager: ObservableObject {
     private var vertical = RepeatFilter(initialDelay: Theme.repeatDelay, interval: Theme.repeatInterval)
     private var axes: [ObjectIdentifier: [String: (x: StickAxis, y: StickAxis)]] = [:]
     private var buttonsDown: [ObjectIdentifier: Set<String>] = [:]
+    /// When Home went down on each controller, and whether holding it has already opened the power menu.
+    private var homeHeld: [ObjectIdentifier: (since: TimeInterval, fired: Bool)] = [:]
     private var observers: [NSObjectProtocol] = []
     private var timer: Timer?
     private var activity: NSObjectProtocol?
@@ -126,7 +129,7 @@ final class ControllerManager: ObservableObject {
         if !accepting {
             (x, y) = (0, 0)
             // In the background only Home counts, and only while a game is running.
-            pressed = watchInBackground && NSApp.modalWindow == nil ? pressed.filter { $0 == .home } : []
+            pressed = watchInBackground && NSApp.modalWindow == nil ? pressed.filter { $0 == .home || $0 == .power } : []
         }
 
         // Horizontal wins when both are held, so a diagonal stick still moves along the row.
@@ -178,6 +181,19 @@ final class ControllerManager: ObservableObject {
         if buttons[GCInputButtonOptions]?.isPressed == true && buttons[GCInputButtonMenu]?.isPressed == true {
             down.insert(combo)
             if !wasDown.contains(combo) && !actions.contains(.home) { actions.append(.home) }
+        }
+        // Home still down after `Theme.homeHoldTime`: the power menu, once per hold.
+        // (The press itself already counted as Home when it went down.)
+        if down.contains(GCInputButtonHome) || down.contains(combo) {
+            let now = ProcessInfo.processInfo.systemUptime
+            var held = homeHeld[id] ?? (since: now, fired: false)
+            if !held.fired && now - held.since >= Theme.homeHoldTime {
+                held.fired = true
+                actions.append(.power)
+            }
+            homeHeld[id] = held
+        } else {
+            homeHeld[id] = nil
         }
         buttonsDown[id] = down
         return actions

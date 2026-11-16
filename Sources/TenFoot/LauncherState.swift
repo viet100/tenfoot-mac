@@ -67,6 +67,40 @@ final class LauncherState: ObservableObject {
         }
     }
 
+    /// The power menu (hold Home): leave TenFoot or end the session.
+    enum PowerItem: CaseIterable, Identifiable {
+        case quit, sleep, restart, shutDown, cancel
+        var id: Self { self }
+        var title: String {
+            switch self {
+            case .quit: "Quit TenFoot"
+            case .sleep: "Sleep"
+            case .restart: "Restart"
+            case .shutDown: "Shut Down"
+            case .cancel: "Cancel"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .quit: "rectangle.portrait.and.arrow.right"
+            case .sleep: "moon"
+            case .restart: "arrow.clockwise"
+            case .shutDown: "power"
+            case .cancel: "xmark"
+            }
+        }
+        /// Quitting, restarting and shutting down ask again before they happen.
+        var needsConfirmation: Bool { self == .quit || self == .restart || self == .shutDown }
+        var question: String {
+            switch self {
+            case .quit: "Quit TenFoot?"
+            case .restart: "Restart your Mac?"
+            case .shutDown: "Shut down your Mac?"
+            case .sleep, .cancel: title
+            }
+        }
+    }
+
     /// "Close <game>?" — shown before closing a running game. `next` is the game to
     /// start once it has closed, when the user picked a different game.
     struct ClosePrompt {
@@ -97,6 +131,16 @@ final class LauncherState: ObservableObject {
 
     /// Called when the user picks Add App; the app delegate shows the file picker.
     var onAddApp: (() -> Void)?
+    /// Carries out a power menu choice (quit, sleep, restart or shut down).
+    var onPower: ((PowerItem) -> Void)?
+    @Published private(set) var powerMenuOpen = false
+    @Published private(set) var powerIndex = 0
+    /// "Restart your Mac?" and the like: asked after picking an item that `needsConfirmation`.
+    @Published private(set) var powerConfirm: PowerItem?
+    @Published private(set) var powerConfirmIndex = 1 // 0 is the action, 1 is Cancel
+
+    /// A pop-up (close prompt, options, power menu or its confirmation) is showing.
+    var popupOpen: Bool { closePrompt != nil || optionsMenu != nil || powerMenuOpen || powerConfirm != nil }
     /// The file picker for Add App is open: the Add App row stays pressed until it closes.
     @Published private(set) var addingApps = false
     /// Called when the user starts a game.
@@ -173,7 +217,7 @@ final class LauncherState: ObservableObject {
         if closePrompt != nil {
             return [(.move, "Move"), (.confirm, "Select"), (.back, "Cancel")]
         }
-        if optionsMenu != nil {
+        if optionsMenu != nil || powerMenuOpen || powerConfirm != nil {
             return [(.move, "Move"), (.confirm, "Select"), (.back, "Back")]
         }
         switch (screen, area) {
@@ -189,6 +233,18 @@ final class LauncherState: ObservableObject {
 
     func handle(_ action: InputAction) {
         guard drag == nil else { return } // the mouse is moving a game
+        if let item = powerConfirm {
+            handlePowerConfirm(action, item: item)
+            return
+        }
+        if powerMenuOpen {
+            handlePower(action)
+            return
+        }
+        if action == .power {
+            openPowerMenu()
+            return
+        }
         if closePrompt != nil {
             handlePrompt(action)
             return
@@ -248,7 +304,7 @@ final class LauncherState: ObservableObject {
             }
         case .back:
             withAnimation(Theme.screenAnimation) { screen = .home }
-        case .left, .right, .close, .home, .options:
+        case .left, .right, .close, .home, .options, .power:
             break
         }
     }
@@ -263,7 +319,7 @@ final class LauncherState: ObservableObject {
             choose(promptFocus)
         case .back, .home:
             choose(.cancel)
-        case .up, .down, .close, .options:
+        case .up, .down, .close, .options, .power:
             break
         }
     }
@@ -340,7 +396,7 @@ final class LauncherState: ObservableObject {
     func click(game index: Int) {
         trace?("click on game \(index)")
         guard screen == .home, games.indices.contains(index) else { return }
-        guard closePrompt == nil, optionsMenu == nil, drag == nil else { return }
+        guard !popupOpen, drag == nil else { return }
         if area == .games && index == focusIndex {
             start(games[index])
             return
@@ -355,7 +411,7 @@ final class LauncherState: ObservableObject {
 
     /// Clicking a round button opens it.
     func click(systemButton index: Int) {
-        guard closePrompt == nil, optionsMenu == nil, screen == .home,
+        guard !popupOpen, screen == .home,
               SystemButton.allCases.indices.contains(index) else { return }
         withAnimation(Theme.selectorAnimation) {
             area = .system
@@ -397,7 +453,7 @@ final class LauncherState: ObservableObject {
     /// Scroll wheel or trackpad swipe: along the game row on the home screen,
     /// up and down the list in Settings. Positive is right/down.
     func scroll(by steps: Int) {
-        guard steps != 0, closePrompt == nil, optionsMenu == nil, drag == nil else { return }
+        guard steps != 0, !popupOpen, drag == nil else { return }
         switch screen {
         case .home:
             guard !games.isEmpty else { return }
@@ -447,7 +503,7 @@ final class LauncherState: ObservableObject {
 
     /// Opens a game's options menu (Y on the focused game, or right-click on a tile).
     func openOptions(game index: Int) {
-        guard screen == .home, closePrompt == nil, optionsMenu == nil, drag == nil,
+        guard screen == .home, !popupOpen, drag == nil,
               games.indices.contains(index) else { return }
         if area != .games || index != focusIndex {
             withAnimation(Theme.selectorAnimation) { area = .games }
@@ -487,7 +543,74 @@ final class LauncherState: ObservableObject {
             pick(OptionsItem.allCases[optionsIndex])
         case .back, .home, .options:
             pick(.cancel)
-        case .left, .right, .close:
+        case .left, .right, .close, .power:
+            break
+        }
+    }
+
+    // MARK: - Power menu
+
+    /// Opens the power menu (Home held down), over whatever else is showing.
+    func openPowerMenu() {
+        guard !powerMenuOpen, powerConfirm == nil, drag == nil else { return }
+        setLaunching(nil)
+        powerIndex = 0
+        withAnimation(Theme.popupAnimation) {
+            closePrompt = nil
+            optionsMenu = nil
+            powerMenuOpen = true
+        }
+    }
+
+    /// Picks an item of the power menu (A on the focused one, or a click).
+    func pickPower(_ item: PowerItem) {
+        guard powerMenuOpen else { return }
+        if item.needsConfirmation {
+            powerConfirmIndex = 1 // start on Cancel
+            withAnimation(Theme.popupAnimation) {
+                powerMenuOpen = false
+                powerConfirm = item
+            }
+            return
+        }
+        withAnimation(Theme.popupAnimation) { powerMenuOpen = false }
+        if item != .cancel { onPower?(item) }
+    }
+
+    /// Answers "Restart your Mac?" and the like: true goes ahead, false cancels.
+    func confirmPower(_ yes: Bool) {
+        guard let item = powerConfirm else { return }
+        withAnimation(Theme.popupAnimation) { powerConfirm = nil }
+        if yes { onPower?(item) }
+    }
+
+    private func handlePowerConfirm(_ action: InputAction, item: PowerItem) {
+        switch action {
+        case .up:
+            withAnimation(Theme.selectorAnimation) { powerConfirmIndex = 0 }
+        case .down:
+            withAnimation(Theme.selectorAnimation) { powerConfirmIndex = 1 }
+        case .confirm:
+            confirmPower(powerConfirmIndex == 0)
+        case .back, .home:
+            confirmPower(false)
+        case .left, .right, .close, .options, .power:
+            break
+        }
+    }
+
+    private func handlePower(_ action: InputAction) {
+        let last = PowerItem.allCases.count - 1
+        switch action {
+        case .up:
+            withAnimation(Theme.selectorAnimation) { powerIndex = max(0, powerIndex - 1) }
+        case .down:
+            withAnimation(Theme.selectorAnimation) { powerIndex = min(last, powerIndex + 1) }
+        case .confirm:
+            pickPower(PowerItem.allCases[powerIndex])
+        case .back, .home:
+            pickPower(.cancel)
+        case .left, .right, .close, .options, .power:
             break
         }
     }
@@ -522,7 +645,7 @@ final class LauncherState: ObservableObject {
 
     /// Picks up the game at `index`. Returns false if it can't be moved right now.
     func beginDrag(_ index: Int) -> Bool {
-        guard drag == nil, screen == .home, closePrompt == nil, optionsMenu == nil, games.indices.contains(index) else {
+        guard drag == nil, screen == .home, !popupOpen, games.indices.contains(index) else {
             trace?("couldn't pick up game \(index): dragging \(drag != nil), prompt \(closePrompt != nil)")
             return false
         }

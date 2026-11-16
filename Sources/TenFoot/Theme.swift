@@ -62,6 +62,7 @@ enum Theme {
     static let stickPress: Float = 0.5      // stick deflection that counts as a press
     static let stickRelease: Float = 0.3    // stick must return below this to release
     static let trackpadStep: CGFloat = 120  // points of trackpad swipe per move
+    static let homeHoldTime: Double = 0.8   // seconds Home is held to open the power menu
     static let releaseWait: Double = 3      // longest wait for buttons to be let go before resuming or starting a game
 
     // Dragging a game to a new place with the mouse

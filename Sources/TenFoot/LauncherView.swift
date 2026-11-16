@@ -67,6 +67,28 @@ struct LauncherView: View {
                         .zIndex(11)
                 }
 
+                // The power menu (hold Home), then "Restart your Mac?" and the like.
+                // One dim stays up while the menu hands over to the question.
+                if state.powerMenuOpen || state.powerConfirm != nil {
+                    Color.black.opacity(Theme.popupDim)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            if state.powerConfirm != nil { state.confirmPower(false) } else { state.pickPower(.cancel) }
+                        }
+                        .transition(.opacity)
+                        .zIndex(10)
+                }
+                if state.powerMenuOpen {
+                    PowerMenuView(state: state, unit: layout.unit)
+                        .transition(.scale(scale: Theme.popupScale).combined(with: .opacity))
+                        .zIndex(11)
+                }
+                if let item = state.powerConfirm {
+                    PowerConfirmView(state: state, item: item, unit: layout.unit)
+                        .transition(.scale(scale: Theme.popupScale).combined(with: .opacity))
+                        .zIndex(11)
+                }
+
                 // The message ("Starting…", or an error) sits on its own line above the hints.
                 VStack(alignment: .trailing, spacing: layout.unit * Theme.messageGap) {
                     if let message = state.message {
@@ -605,23 +627,74 @@ private struct ClosePromptView: View {
     }
 }
 
-/// A game's options: its name, then a list of actions (Remove from TenFoot, Cancel).
-/// Up/down moves, A picks, B closes.
+/// A game's options: its name, then Remove from TenFoot and Cancel.
 private struct OptionsMenuView: View {
     @ObservedObject var state: LauncherState
     let menu: LauncherState.OptionsMenu
     let unit: CGFloat
 
     var body: some View {
+        MenuPanel(title: menu.game.title, unit: unit, rows: LauncherState.OptionsItem.allCases.enumerated().map { index, item in
+            MenuPanel.Row(id: index, title: item.title, symbol: item.symbol,
+                          note: state.isAvailable(item) ? nil : "Close it first",
+                          focused: state.optionsIndex == index) { state.pick(item) }
+        })
+    }
+}
+
+/// The power menu (hold Home): Quit TenFoot, Sleep, Restart, Shut Down, Cancel.
+private struct PowerMenuView: View {
+    @ObservedObject var state: LauncherState
+    let unit: CGFloat
+
+    var body: some View {
+        MenuPanel(title: "TenFoot", unit: unit, rows: LauncherState.PowerItem.allCases.enumerated().map { index, item in
+            MenuPanel.Row(id: index, title: item.title, symbol: item.symbol, note: nil,
+                          focused: state.powerIndex == index) { state.pickPower(item) }
+        })
+    }
+}
+
+/// "Restart your Mac?": the action, then Cancel (focused first).
+private struct PowerConfirmView: View {
+    @ObservedObject var state: LauncherState
+    let item: LauncherState.PowerItem
+    let unit: CGFloat
+
+    var body: some View {
+        MenuPanel(title: item.question, unit: unit, rows: [
+            MenuPanel.Row(id: 0, title: item.title, symbol: item.symbol, note: nil,
+                          focused: state.powerConfirmIndex == 0) { state.confirmPower(true) },
+            MenuPanel.Row(id: 1, title: "Cancel", symbol: "xmark", note: nil,
+                          focused: state.powerConfirmIndex == 1) { state.confirmPower(false) },
+        ])
+    }
+}
+
+/// A pop-up list: a title, then one row per action. Up/down moves, A picks, B closes.
+/// A row with a `note` can't be picked right now and is dimmed, with the note saying why.
+private struct MenuPanel: View {
+    struct Row: Identifiable {
+        let id: Int
+        let title: String
+        let symbol: String
+        let note: String?
+        let focused: Bool
+        let pick: () -> Void
+    }
+
+    let title: String
+    let unit: CGFloat
+    let rows: [Row]
+
+    var body: some View {
         let shape = RoundedRectangle(cornerRadius: unit * 0.04, style: .continuous)
         VStack(alignment: .leading, spacing: unit * 0.03) {
-            Text(menu.game.title)
+            Text(title)
                 .font(.system(size: unit * Theme.screenTitleSize * 0.8, weight: .bold))
                 .lineLimit(1)
             VStack(spacing: unit * 0.014) {
-                ForEach(Array(LauncherState.OptionsItem.allCases.enumerated()), id: \.element) { index, item in
-                    row(item, focused: state.optionsIndex == index, available: state.isAvailable(item))
-                }
+                ForEach(rows) { row($0) }
             }
         }
         .foregroundStyle(.white)
@@ -631,28 +704,28 @@ private struct OptionsMenuView: View {
         .glassEffect(Theme.popupGlass, in: shape)
     }
 
-    private func row(_ item: LauncherState.OptionsItem, focused: Bool, available: Bool) -> some View {
+    private func row(_ row: Row) -> some View {
         let shape = RoundedRectangle(cornerRadius: unit * 0.025, style: .continuous)
         return HStack(spacing: unit * 0.02) {
-            Image(systemName: item.symbol)
+            Image(systemName: row.symbol)
                 .font(.system(size: unit * 0.03, weight: .medium))
                 .frame(width: unit * 0.045)
-            Text(item.title)
+            Text(row.title)
                 .font(.system(size: unit * Theme.settingsRowSize, weight: .semibold))
             Spacer(minLength: unit * 0.02)
-            if !available {
-                Text("Close it first")
+            if let note = row.note {
+                Text(note)
                     .font(.system(size: unit * Theme.settingsDetailSize))
             }
         }
-        .opacity(available ? 1 : 0.5)
+        .opacity(row.note == nil ? 1 : 0.5)
         .padding(.horizontal, unit * 0.025)
         .padding(.vertical, unit * 0.018)
-        .glassEffect(focused ? Glass.clear.tint(.white.opacity(Theme.focusedGlassTint))
-                             : Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
-        .overlay(shape.strokeBorder(.white.opacity(focused ? 0.85 : 0), lineWidth: unit * 0.003))
+        .glassEffect(row.focused ? Glass.clear.tint(.white.opacity(Theme.focusedGlassTint))
+                                 : Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
+        .overlay(shape.strokeBorder(.white.opacity(row.focused ? 0.85 : 0), lineWidth: unit * 0.003))
         .contentShape(shape)
-        .onTapGesture { state.pick(item) }
+        .onTapGesture(perform: row.pick)
     }
 }
 

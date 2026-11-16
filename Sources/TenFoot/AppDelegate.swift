@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import SwiftUI
 import TenFootCore
 import UniformTypeIdentifiers
@@ -63,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Let the row show its press before the picker takes over the screen.
             DispatchQueue.main.asyncAfter(deadline: .now() + Theme.pickerDelay) { self?.presentAddAppPanel() }
         }
+
+        state.onPower = { [weak self] item in self?.power(item) }
 
         // Starting or resuming waits until A is let go; otherwise the game comes to the
         // front with A still held and takes it as a press of its own.
@@ -162,6 +165,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if action == .home && !NSApp.isActive && launcher.current != nil {
             state.showRunningGame()
             returnToLauncher()
+        } else if action == .power && !NSApp.isActive {
+            // Home held during a game: TenFoot comes forward with the power menu open.
+            returnToLauncher()
+            state.handle(.power)
         } else {
             // Using the controller hides the pointer until the mouse moves again.
             if NSApp.isActive { NSCursor.setHiddenUntilMouseMoves(true) }
@@ -187,6 +194,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
                 if let error { print("Couldn't bring TenFoot forward: \(error)") }
             }
+        }
+    }
+
+    // MARK: - Power menu
+
+    /// Carries out a power menu choice. Restart and Shut Down go through macOS the same
+    /// way the Apple menu does, so apps (and games) get the chance to save and quit.
+    private func power(_ item: LauncherState.PowerItem) {
+        switch item {
+        case .quit:
+            NSApp.terminate(nil)
+        case .sleep:
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+            process.arguments = ["sleepnow"]
+            do {
+                try process.run()
+            } catch {
+                state.show(message: "Couldn't put the Mac to sleep")
+            }
+        case .restart:
+            askLoginWindow(AEEventID(kAERestart), failure: "Couldn't restart")
+        case .shutDown:
+            askLoginWindow(AEEventID(kAEShutDown), failure: "Couldn't shut down")
+        case .cancel:
+            break
+        }
+    }
+
+    /// Sends a restart or shut down request to macOS (the loginwindow process).
+    private func askLoginWindow(_ eventID: AEEventID, failure: String) {
+        let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.loginwindow")
+        let event = NSAppleEventDescriptor(eventClass: AEEventClass(kCoreEventClass), eventID: eventID,
+                                           targetDescriptor: target, returnID: AEReturnID(kAutoGenerateReturnID),
+                                           transactionID: AETransactionID(kAnyTransactionID))
+        do {
+            _ = try event.sendEvent(options: [.noReply], timeout: 10)
+        } catch {
+            print("\(failure): \(error)")
+            state.show(message: "\(failure). Allow TenFoot in System Settings → Privacy & Security → Automation.")
         }
     }
 
@@ -359,6 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await checkDragToReorder(window: window, directory: directory)
         await checkLaunchAndReturn(window: window, directory: directory)
         await checkRemove(window: window, directory: directory)
+        await checkPowerMenu(window: window, directory: directory)
         NSApp.terminate(nil)
     }
 
@@ -680,6 +728,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let removed = after.count == before.count - 1 && !after.contains(target) && state.optionsMenu == nil
         print("REMOVE CHECK: " + (removed ? "PASSED, removed \(target) (\(before.count) → \(after.count) games)"
                                           : "FAILED, before: \(before), after: \(after)"))
+    }
+
+    /// Opens the power menu, then asks to restart and says no. Nothing is carried out:
+    /// choices are only logged. Logged as "POWER CHECK: …".
+    private func checkPowerMenu(window: NSWindow, directory: URL) async {
+        var chosen: [LauncherState.PowerItem] = []
+        state.onPower = { chosen.append($0) }
+        state.handle(.power)
+        try? await Task.sleep(for: .seconds(1.2))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("power-menu.png"))
+        let opened = state.powerMenuOpen
+        state.handle(.down) // Sleep
+        state.handle(.down) // Restart
+        state.handle(.confirm)
+        try? await Task.sleep(for: .seconds(1.2))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("power-confirm.png"))
+        let asked = state.powerConfirm == .restart && state.powerConfirmIndex == 1
+        state.handle(.confirm) // Cancel is focused
+        try? await Task.sleep(for: .seconds(0.8))
+        let ok = opened && asked && chosen.isEmpty && !state.popupOpen
+        print("POWER CHECK: " + (ok ? "PASSED, menu opened, Restart asked first, Cancel did nothing"
+                                    : "FAILED, opened: \(opened), asked: \(asked), chosen: \(chosen), still open: \(state.popupOpen)"))
     }
 
     /// Apps every Mac has, standing in for the user's games in CI snapshots.
