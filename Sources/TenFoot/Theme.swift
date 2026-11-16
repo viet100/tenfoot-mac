@@ -39,6 +39,7 @@ enum Theme {
     // Hint bar
     static let hintSize: CGFloat = 0.022         // × height
     static let hintMargin: CGFloat = 0.05        // from the screen corner, × height
+    static let messageGap: CGFloat = 0.015       // between the "Starting…" message and the hints, × height
 
     // Status bar (battery, Wi‑Fi, time), top right
     static let statusSize: CGFloat = 0.022        // × height

@@ -44,16 +44,16 @@ struct LauncherView: View {
                         .transition(.opacity)
                 }
 
-                if let message = state.message {
-                    MessageBanner(text: message, unit: layout.unit)
-                        .padding(layout.unit * Theme.hintMargin)
-                        .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomLeading)
-                        .transition(.opacity)
+                // The message ("Starting…", or an error) sits on its own line above the hints.
+                VStack(alignment: .trailing, spacing: layout.unit * Theme.messageGap) {
+                    if let message = state.message {
+                        MessageBanner(text: message, unit: layout.unit)
+                            .transition(.opacity)
+                    }
+                    HintBar(state: state, controllers: controllers, unit: layout.unit)
                 }
-
-                HintBar(state: state, controllers: controllers, unit: layout.unit)
-                    .padding(layout.unit * Theme.hintMargin)
-                    .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
+                .padding(layout.unit * Theme.hintMargin)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
             }
             .onAppear { state.setVisibleCount(layout.visibleCount) }
             .onChange(of: geo.size) { _, size in state.setVisibleCount(Layout(size: size).visibleCount) }
@@ -385,7 +385,7 @@ private struct ClosePromptView: View {
     }
 }
 
-/// "Starting…" or an error, in the bottom-left corner.
+/// "Starting…" or an error, on its own line above the hint bar.
 private struct MessageBanner: View {
     let text: String
     let unit: CGFloat
