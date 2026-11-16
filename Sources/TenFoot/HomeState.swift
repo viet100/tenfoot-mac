@@ -4,7 +4,12 @@ import TenFootCore
 @MainActor
 final class HomeState: ObservableObject {
     let games: [SampleGame]
-    @Published private(set) var row: RowFocus
+    private var row: RowFocus
+
+    /// Drives the selector and the title.
+    @Published private(set) var focusIndex = 0
+    /// Index of the first visible tile; drives the carousel offset.
+    @Published private(set) var scrollIndex = 0
 
     init(games: [SampleGame] = SampleGame.all) {
         self.games = games
@@ -12,22 +17,35 @@ final class HomeState: ObservableObject {
     }
 
     var focusedGame: SampleGame? {
-        games.indices.contains(row.index) ? games[row.index] : nil
+        games.indices.contains(focusIndex) ? games[focusIndex] : nil
     }
 
-    // Animations are attached in HomeView, so the selector and the carousel
-    // can each move with their own easing.
     func move(by delta: Int) {
-        row.move(by: delta)
+        var next = row
+        guard next.move(by: delta) else { return }
+        apply(next)
     }
 
     func select(_ index: Int) {
-        row.select(index)
+        var next = row
+        guard next.select(index) else { return }
+        apply(next)
     }
 
     func setVisibleCount(_ count: Int) {
         guard count != row.visibleCount else { return }
         row.setVisibleCount(count)
+        scrollIndex = row.firstVisible
+    }
+
+    /// The carousel and the selector each animate in their own transaction,
+    /// so each gets its own easing.
+    private func apply(_ next: RowFocus) {
+        row = next
+        if next.firstVisible != scrollIndex {
+            withAnimation(Theme.carouselAnimation) { scrollIndex = next.firstVisible }
+        }
+        withAnimation(Theme.selectorAnimation) { focusIndex = next.index }
     }
 }
 

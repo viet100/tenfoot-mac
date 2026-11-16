@@ -17,9 +17,8 @@ struct HomeView: View {
                 Backdrop(game: state.focusedGame)
 
                 TileRow(state: state, unit: unit, tile: tile, rim: rim, cell: cell, step: step)
-                    .offset(x: margin - rim - CGFloat(state.row.firstVisible) * step,
+                    .offset(x: margin - rim - CGFloat(state.scrollIndex) * step,
                             y: unit * Theme.rowCenterY - cell / 2)
-                    .animation(Theme.carouselAnimation, value: state.row.firstVisible)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
 
                 HintBar(unit: unit)
@@ -41,7 +40,7 @@ struct HomeView: View {
     }
 }
 
-/// The tiles plus the glass selector, laid out in one coordinate space.
+/// The tiles, the glass selector and the title, laid out in one coordinate space.
 ///
 /// Every tile and the selector are placed with the same formula
 /// (cell `i` starts at `i × step`), so the selector is always exactly centred
@@ -58,20 +57,30 @@ private struct TileRow: View {
         let radius = tile * Theme.tileCornerRadius
         let selectorShape = RoundedRectangle(cornerRadius: radius + rim, style: .continuous)
         let tint = (state.focusedGame?.primary ?? .white).opacity(Theme.selectorTint)
+        let focusX = CGFloat(state.focusIndex) * step
 
         ZStack(alignment: .topLeading) {
             // The selector: one piece of glass that slides behind the tiles.
             Color.clear
                 .frame(width: cell, height: cell)
                 .glassEffect(.regular.tint(tint), in: selectorShape)
-                .offset(x: CGFloat(state.row.index) * step)
-                .animation(Theme.selectorAnimation, value: state.row.index)
+                .offset(x: focusX)
 
             ForEach(Array(state.games.enumerated()), id: \.element.id) { index, game in
-                TileView(game: game, tile: tile, unit: unit, isFocused: index == state.row.index)
+                TileView(game: game, tile: tile, unit: unit)
                     .frame(width: cell, height: cell)
                     .offset(x: CGFloat(index) * step)
             }
+
+            // The title travels with the selector.
+            Text(state.focusedGame?.title ?? "")
+                .font(.system(size: unit * Theme.titleSize, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
+                .lineLimit(1)
+                .fixedSize()
+                .contentTransition(.opacity)
+                .offset(x: focusX + rim, y: rim - unit * Theme.titleGap)
         }
         .frame(width: CGFloat(max(state.games.count - 1, 0)) * step + cell, height: cell, alignment: .topLeading)
     }
@@ -81,7 +90,6 @@ private struct TileView: View {
     let game: SampleGame
     let tile: CGFloat
     let unit: CGFloat
-    let isFocused: Bool
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: tile * Theme.tileCornerRadius, style: .continuous)
@@ -89,19 +97,6 @@ private struct TileView: View {
         GameArt(game: game, size: tile)
             .clipShape(shape)
             .overlay(shape.strokeBorder(.white.opacity(0.12), lineWidth: max(1, unit * 0.0015)))
-            .overlay(alignment: .topLeading) {
-                if isFocused {
-                    Text(game.title)
-                        .font(.system(size: unit * Theme.titleSize, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .offset(y: -unit * Theme.titleGap)
-                        .transition(.opacity)
-                }
-            }
-            .animation(Theme.titleAnimation, value: isFocused)
     }
 }
 

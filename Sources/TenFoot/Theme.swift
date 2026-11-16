@@ -31,6 +31,5 @@ enum Theme {
     static var motionScale: Double = 1
     static var selectorAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
     static var carouselAnimation: Animation { .smooth(duration: 0.18 * motionScale) }
-    static var titleAnimation: Animation { .easeInOut(duration: 0.15 * motionScale) }
     static var backdropAnimation: Animation { .easeInOut(duration: 0.60 * motionScale) }
 }
