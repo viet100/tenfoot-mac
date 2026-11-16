@@ -37,14 +37,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if snapshotDir == nil {
             let library: Library
             do {
-                library = try Library.load(from: LibraryLocation.file)
+                library = try Library.load(from: StorageLocation.library)
             } catch {
                 print("Couldn't read library: \(error)")
                 library = Library()
             }
-            state = LauncherState(library: library, libraryFile: LibraryLocation.file)
+            let preferences: Preferences
+            do {
+                preferences = try Preferences.load(from: StorageLocation.preferences)
+            } catch {
+                print("Couldn't read preferences: \(error)")
+                preferences = Preferences()
+            }
+            state = LauncherState(library: library, preferences: preferences, saves: true)
         } else {
-            state = LauncherState(library: Library(), libraryFile: nil)
+            state = LauncherState(library: Library(), preferences: Preferences(), saves: false)
         }
         state.onAddApp = { [weak self] in
             // Let the current input event finish before the picker takes over.
@@ -203,6 +210,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         state.handle(.down)
         await capture("home-settings-button")
+
+        // Settings → Icon Style, switched to Full Colour.
+        state.handle(.confirm)
+        state.handle(.down)
+        state.handle(.confirm)
+        await capture("settings-icon-style")
+        state.handle(.back)
         state.handle(.up)
 
         await recordSlide(of: window, to: directory.appendingPathComponent("slide", isDirectory: true))

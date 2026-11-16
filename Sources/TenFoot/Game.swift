@@ -12,12 +12,35 @@ struct Game: Identifiable {
     let primary: Color
     let secondary: Color
 
-    init(entry: LibraryEntry) {
+    init(entry: LibraryEntry, iconStyle: IconStyle) {
         id = entry.id
         title = entry.title
         url = URL(fileURLWithPath: entry.path)
-        icon = NSWorkspace.shared.icon(forFile: entry.path)
+        switch iconStyle {
+        case .matchMacOS:
+            icon = NSWorkspace.shared.icon(forFile: entry.path)
+        case .fullColour:
+            icon = Self.bundleIcon(at: url) ?? NSWorkspace.shared.icon(forFile: entry.path)
+        }
         (primary, secondary) = Self.colors(of: icon)
+    }
+
+    /// The app's own icon file from inside its bundle (Contents/Resources/<name>.icns).
+    /// It's the full-colour artwork, untouched by the macOS icon style. Apps that only
+    /// ship their icon in an asset catalog have no such file, so this returns nil.
+    private static func bundleIcon(at url: URL) -> NSImage? {
+        guard let bundle = Bundle(url: url) else { return nil }
+        let names = ["CFBundleIconFile", "CFBundleIconName"].compactMap {
+            bundle.object(forInfoDictionaryKey: $0) as? String
+        }
+        for name in names {
+            let file = (name as NSString).pathExtension.isEmpty ? name + ".icns" : name
+            if let iconURL = bundle.url(forResource: file, withExtension: nil),
+               let image = NSImage(contentsOf: iconURL) {
+                return image
+            }
+        }
+        return nil
     }
 
     /// The name to show for an app or executable: "Hollow Knight.app" becomes "Hollow Knight".
@@ -60,11 +83,12 @@ struct Game: Identifiable {
     }
 }
 
-enum LibraryLocation {
-    /// ~/Library/Application Support/TenFoot/library.json
-    static var file: URL {
+/// Where TenFoot saves things: ~/Library/Application Support/TenFoot/
+enum StorageLocation {
+    static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("TenFoot", isDirectory: true)
-            .appendingPathComponent("library.json")
     }
+    static var library: URL { directory.appendingPathComponent("library.json") }
+    static var preferences: URL { directory.appendingPathComponent("preferences.json") }
 }

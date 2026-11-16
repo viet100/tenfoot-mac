@@ -211,7 +211,7 @@ private struct SettingsScreen: View {
 
             VStack(spacing: unit * 0.014) {
                 ForEach(Array(LauncherState.SettingsItem.allCases.enumerated()), id: \.element) { index, item in
-                    SettingsRow(item: item, focused: index == state.settingsIndex, unit: unit)
+                    SettingsRow(item: item, value: value(of: item), focused: index == state.settingsIndex, unit: unit)
                         .contentShape(Rectangle())
                         .onTapGesture { state.click(settingsItem: index) }
                 }
@@ -224,8 +224,23 @@ private struct SettingsScreen: View {
     }
 }
 
+private extension SettingsScreen {
+    /// The current choice, shown at the right of a row (nil for actions like Add App).
+    func value(of item: LauncherState.SettingsItem) -> String? {
+        switch item {
+        case .addApp: nil
+        case .iconStyle:
+            switch state.preferences.iconStyle {
+            case .matchMacOS: "Match macOS"
+            case .fullColour: "Full Colour"
+            }
+        }
+    }
+}
+
 private struct SettingsRow: View {
     let item: LauncherState.SettingsItem
+    let value: String?
     let focused: Bool
     let unit: CGFloat
 
@@ -242,7 +257,12 @@ private struct SettingsRow: View {
                     .font(.system(size: unit * Theme.settingsDetailSize))
                     .opacity(0.7)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: unit * 0.02)
+            if let value {
+                Text(value)
+                    .font(.system(size: unit * Theme.settingsRowSize, weight: .medium))
+                    .opacity(0.85)
+            }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, unit * 0.03)

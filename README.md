@@ -15,6 +15,7 @@ Done so far: the home screen, controller navigation, and a Settings screen where
    ```
 4. Move with the d-pad, stick or arrow keys. **A** (or Return) selects, **B** (or Esc) goes back, and **⌘Q** exits. With a mouse or trackpad, click to select and scroll or swipe to move along the row. The Dock and menu bar come back when you quit.
 5. To add your games, go down to the **Settings** button, open it, and choose **Add App**. Pick any apps or programs (you can select several at once). They show up on the home screen and are remembered next time, in `~/Library/Application Support/TenFoot/library.json`.
+6. If your Mac uses the Clear, Tinted or Dark icon style, **Settings → Icon Style → Full Colour** shows each app's own colour icon instead. Apps that don't include a separate icon file keep the macOS version.
 
 Requires macOS 26 or later.
 

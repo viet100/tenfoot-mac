@@ -20,10 +20,26 @@ final class LauncherState: ObservableObject {
     /// Items on the Settings screen. New menus get added here over time.
     enum SettingsItem: CaseIterable, Identifiable {
         case addApp
+        case iconStyle
         var id: Self { self }
-        var title: String { "Add App" }
-        var detail: String { "Choose an app or program to put on the home screen" }
-        var symbol: String { "plus.app" }
+        var title: String {
+            switch self {
+            case .addApp: "Add App"
+            case .iconStyle: "Icon Style"
+            }
+        }
+        var detail: String {
+            switch self {
+            case .addApp: "Choose an app or program to put on the home screen"
+            case .iconStyle: "Match the macOS icon style, or always show icons in full colour"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .addApp: "plus.app"
+            case .iconStyle: "paintpalette"
+            }
+        }
     }
 
     enum HintKind { case move, confirm, back }
@@ -37,18 +53,20 @@ final class LauncherState: ObservableObject {
     @Published private(set) var scrollIndex = 0
     @Published private(set) var systemIndex = 0
     @Published private(set) var settingsIndex = 0
+    @Published private(set) var preferences: Preferences
 
     /// Called when the user picks Add App; the app delegate shows the file picker.
     var onAddApp: (() -> Void)?
 
     private var library: Library
-    private let libraryFile: URL? // nil: don't save (CI snapshots)
+    private let saves: Bool // false: don't save anything (CI snapshots)
     private var row: RowFocus
 
-    init(library: Library, libraryFile: URL?) {
+    init(library: Library, preferences: Preferences, saves: Bool) {
         self.library = library
-        self.libraryFile = libraryFile
-        let games = library.entries.map(Game.init)
+        self.preferences = preferences
+        self.saves = saves
+        let games = library.entries.map { Game(entry: $0, iconStyle: preferences.iconStyle) }
         self.games = games
         self.row = RowFocus(count: games.count)
         self.area = games.isEmpty ? .system : .games
@@ -110,6 +128,7 @@ final class LauncherState: ObservableObject {
         case .confirm:
             switch SettingsItem.allCases[settingsIndex] {
             case .addApp: onAddApp?()
+            case .iconStyle: nextIconStyle()
             }
         case .back:
             withAnimation(Theme.screenAnimation) { screen = .home }
@@ -224,16 +243,16 @@ final class LauncherState: ObservableObject {
         for url in urls {
             lastAdded = library.add(path: url.path, title: Game.title(for: url))
         }
-        if let libraryFile {
+        if saves {
             do {
-                try library.save(to: libraryFile)
+                try library.save(to: StorageLocation.library)
             } catch {
                 print("Couldn't save library: \(error)")
             }
         }
 
         let existing = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
-        games = library.entries.map { existing[$0.id] ?? Game(entry: $0) }
+        games = library.entries.map { existing[$0.id] ?? Game(entry: $0, iconStyle: preferences.iconStyle) }
 
         var next = RowFocus(count: games.count, visibleCount: row.visibleCount)
         if let id = lastAdded?.id, let index = games.firstIndex(where: { $0.id == id }) {
@@ -245,6 +264,23 @@ final class LauncherState: ObservableObject {
         withAnimation(Theme.screenAnimation) {
             screen = .home
             area = .games
+        }
+    }
+
+    // MARK: - Preferences
+
+    /// Switches to the next icon style, reloads every icon and saves the choice.
+    private func nextIconStyle() {
+        let styles = IconStyle.allCases
+        let index = styles.firstIndex(of: preferences.iconStyle) ?? 0
+        preferences.iconStyle = styles[(index + 1) % styles.count]
+        games = library.entries.map { Game(entry: $0, iconStyle: preferences.iconStyle) }
+        if saves {
+            do {
+                try preferences.save(to: StorageLocation.preferences)
+            } catch {
+                print("Couldn't save preferences: \(error)")
+            }
         }
     }
 }
