@@ -10,6 +10,7 @@ final class LauncherWindow: NSWindow {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = HomeState()
+    private var controllers: ControllerManager?
     private var window: LauncherWindow?
     private var keyMonitor: Any?
 
@@ -27,7 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.appearance = NSAppearance(named: .darkAqua)
         window.isReleasedWhenClosed = false
         let status = snapshotDir == nil ? StatusModel() : StatusModel(sample: ())
-        let hosting = NSHostingView(rootView: HomeView(state: state, status: status))
+        let controllers = ControllerManager { [weak self] move in self?.state.move(by: move) }
+        self.controllers = controllers
+        let hosting = NSHostingView(rootView: HomeView(state: state, status: status, controllers: controllers))
         hosting.sizingOptions = []
         window.contentView = hosting
         window.makeKeyAndOrderFront(nil)

@@ -30,6 +30,12 @@ enum Theme {
     static let statusMargin: CGFloat = 0.05       // from the screen corner, × height
     static let statusRefreshInterval: TimeInterval = 10 // seconds between battery/Wi‑Fi readings
 
+    // Controller input
+    static let repeatDelay: Double = 0.40   // seconds a direction is held before it repeats
+    static let repeatInterval: Double = 0.11 // seconds between repeats while held
+    static let stickPress: Float = 0.5      // stick deflection that counts as a press
+    static let stickRelease: Float = 0.3    // stick must return below this to release
+
     // Backdrop
     static let backdropDim: Double = 0.35        // black overlay on the colour mesh
 

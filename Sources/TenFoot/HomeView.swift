@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var state: HomeState
     let status: StatusModel
+    let controllers: ControllerManager
 
     var body: some View {
         GeometryReader { geo in
@@ -26,7 +27,7 @@ struct HomeView: View {
                     .padding(unit * Theme.statusMargin)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
 
-                HintBar(unit: unit)
+                HintBar(controllers: controllers, unit: unit)
                     .padding(unit * Theme.hintMargin)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
             }
@@ -148,11 +149,12 @@ private struct Backdrop: View {
 }
 
 private struct HintBar: View {
+    @ObservedObject var controllers: ControllerManager
     let unit: CGFloat
 
     var body: some View {
         HStack(spacing: unit * 0.035) {
-            hint(symbol: "arrow.left.arrow.right", label: "Move")
+            hint(symbol: controllers.moveSymbol, label: "Move")
             hint(symbol: "command", label: "Q  Exit")
         }
         .font(.system(size: unit * Theme.hintSize, weight: .medium))
