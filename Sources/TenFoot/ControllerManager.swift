@@ -52,6 +52,8 @@ final class ControllerManager: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var timer: Timer?
     private var activity: NSObjectProtocol?
+    /// Waiting to run once every button is let go (see `afterButtonsReleased`).
+    private var waitingForRelease: (action: () -> Void, deadline: TimeInterval)?
 
     init(onAction: @escaping (InputAction) -> Void) {
         self.onAction = onAction
@@ -89,7 +91,24 @@ final class ControllerManager: ObservableObject {
         closeSymbol = profile?.buttons[GCInputButtonX]?.sfSymbolsName ?? Self.keyboardCloseSymbol
     }
 
+    /// Runs `action` once no button is held on any controller, so the button that
+    /// asked for it is let go before anything else (such as a game) comes to the front
+    /// and reads it as a press of its own. Runs anyway after `Theme.releaseWait`.
+    func afterButtonsReleased(_ action: @escaping () -> Void) {
+        waitingForRelease = (action, ProcessInfo.processInfo.systemUptime + Theme.releaseWait)
+    }
+
     private func poll() {
+        if let waiting = waitingForRelease {
+            let held = GCController.controllers().contains { controller in
+                controller.physicalInputProfile.buttons.values.contains { $0.isPressed }
+            }
+            if !held || ProcessInfo.processInfo.systemUptime >= waiting.deadline {
+                waitingForRelease = nil
+                waiting.action()
+            }
+        }
+
         // Button and stick state is always tracked, so a button that is already held
         // when TenFoot comes back to the front (or a file picker closes) doesn't fire.
         let accepting = NSApp.isActive && NSApp.modalWindow == nil

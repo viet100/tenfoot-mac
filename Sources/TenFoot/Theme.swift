@@ -57,6 +57,7 @@ enum Theme {
     static let stickPress: Float = 0.5      // stick deflection that counts as a press
     static let stickRelease: Float = 0.3    // stick must return below this to release
     static let trackpadStep: CGFloat = 120  // points of trackpad swipe per move
+    static let releaseWait: Double = 3      // longest wait for buttons to be let go before resuming or starting a game
 
     // Dragging a game to a new place with the mouse
     static let dragThreshold: CGFloat = 6          // points the pointer moves before a press becomes a drag

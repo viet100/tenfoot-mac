@@ -63,8 +63,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.presentAddAppPanel() }
         }
 
-        state.onLaunch = { [weak self] game in self?.launch(game) }
-        state.onResume = { [weak self] in self?.launcher.resume() }
+        // Starting or resuming waits until A is let go; otherwise the game comes to the
+        // front with A still held and takes it as a press of its own.
+        state.onLaunch = { [weak self] game in
+            self?.afterButtonsReleased { self?.launch(game) }
+        }
+        state.onResume = { [weak self] in
+            self?.afterButtonsReleased { self?.launcher.resume() }
+        }
         state.onClose = { [weak self] next in
             self?.pendingLaunch = next
             self?.launcher.close()
@@ -121,7 +127,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         })
     }
 
-    private func gameEnded() {
+    private func afterButtonsReleased(_ action: @escaping () -> Void) {
+        if let controllers {
+            controllers.afterButtonsReleased(action)
+        } else {
+            action()
+        }
+    }
+
+        private func gameEnded() {
         state.setRunningGame(nil)
         controllers?.watchInBackground = false
     }
