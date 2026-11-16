@@ -26,7 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = .black
         window.appearance = NSAppearance(named: .darkAqua)
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: HomeView(state: state))
+        let status = snapshotDir == nil ? StatusModel() : StatusModel(sample: ())
+        let hosting = NSHostingView(rootView: HomeView(state: state, status: status))
         hosting.sizingOptions = []
         window.contentView = hosting
         window.makeKeyAndOrderFront(nil)

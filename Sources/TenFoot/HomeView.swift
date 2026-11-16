@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @ObservedObject var state: HomeState
+    let status: StatusModel
 
     var body: some View {
         GeometryReader { geo in
@@ -20,6 +21,10 @@ struct HomeView: View {
                     .offset(x: margin - rim - CGFloat(state.scrollIndex) * step,
                             y: unit * Theme.rowCenterY - cell / 2)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+
+                StatusBar(model: status, unit: unit)
+                    .padding(unit * Theme.statusMargin)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
 
                 HintBar(unit: unit)
                     .padding(unit * Theme.hintMargin)
@@ -74,7 +79,7 @@ private struct TileRow: View {
 
             // The title travels with the selector.
             Text(state.focusedGame?.title ?? "")
-                .font(.system(size: unit * Theme.titleSize, weight: .semibold, design: .rounded))
+                .font(.system(size: unit * Theme.titleSize, weight: .semibold))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
                 .lineLimit(1)
@@ -150,7 +155,7 @@ private struct HintBar: View {
             hint(symbol: "arrow.left.arrow.right", label: "Move")
             hint(symbol: "command", label: "Q  Exit")
         }
-        .font(.system(size: unit * Theme.hintSize, weight: .medium, design: .rounded))
+        .font(.system(size: unit * Theme.hintSize, weight: .medium))
         .foregroundStyle(.white)
         .padding(.horizontal, unit * 0.03)
         .padding(.vertical, unit * 0.016)

@@ -24,6 +24,12 @@ enum Theme {
     static let hintSize: CGFloat = 0.022         // × height
     static let hintMargin: CGFloat = 0.05        // from the screen corner, × height
 
+    // Status bar (battery, Wi‑Fi, time), top right
+    static let statusSize: CGFloat = 0.022        // × height
+    static let statusItemSpacing: CGFloat = 0.03  // between items, × height
+    static let statusMargin: CGFloat = 0.05       // from the screen corner, × height
+    static let statusRefreshInterval: TimeInterval = 10 // seconds between battery/Wi‑Fi readings
+
     // Backdrop
     static let backdropDim: Double = 0.35        // black overlay on the colour mesh
 
