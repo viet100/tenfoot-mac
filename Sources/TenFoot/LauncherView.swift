@@ -177,14 +177,7 @@ private struct TileRow: View {
                     // The dragged game's own tile waits, invisible, in the slot it will drop into.
                     .opacity(state.drag?.id == game.id ? 0 : 1)
                     .frame(width: layout.cell, height: layout.cell)
-                    // Still clickable while invisible, so the drag that hid it carries on.
-                    .contentShape(selectorShape.inset(by: rim))
-                    .onTapGesture { state.click(game: index) }
-                    .gesture(
-                        DragGesture(minimumDistance: Theme.dragThreshold, coordinateSpace: .named(HomeScreen.space))
-                            .onChanged { dragChanged(index, $0) }
-                            .onEnded { _ in drop() }
-                    )
+                    .contentShape(selectorShape.inset(by: rim)) // the tile is what you can click, not the rim
                     .offset(x: CGFloat(state.slot(of: index)) * layout.step)
             }
 
@@ -201,6 +194,41 @@ private struct TileRow: View {
         }
         .frame(width: CGFloat(max(state.games.count - 1, 0)) * layout.step + layout.cell,
                height: layout.cell, alignment: .topLeading)
+        // One gesture for both clicking and dragging, so the two never compete for a press:
+        // let go without moving and it's a click; move a few points and the game is picked up.
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(HomeScreen.space))
+                .onChanged { pointerMoved($0) }
+                .onEnded { pointerReleased($0) }
+        )
+    }
+
+    /// The game whose tile is under `point` (home-screen coordinates), if any.
+    private func game(at point: CGPoint) -> Int? {
+        let x = point.x - layout.rowOrigin(scrollIndex: state.scrollIndex)
+        let slot = Int((x / layout.step).rounded(.down))
+        let intoCell = x - CGFloat(slot) * layout.step
+        guard state.games.indices.contains(slot), intoCell >= layout.rim, intoCell <= layout.rim + layout.tile else { return nil }
+        return slot
+    }
+
+    private func pointerMoved(_ value: DragGesture.Value) {
+        if state.drag == nil {
+            let distance = hypot(value.translation.width, value.translation.height)
+            guard distance >= Theme.dragThreshold, let index = game(at: value.startLocation) else { return }
+            dragChanged(index, value)
+        } else {
+            dragChanged(state.drag?.from ?? 0, value)
+        }
+    }
+
+    private func pointerReleased(_ value: DragGesture.Value) {
+        if state.drag != nil {
+            drop()
+        } else if hypot(value.translation.width, value.translation.height) < Theme.dragThreshold,
+                  let index = game(at: value.startLocation) {
+            state.click(game: index)
+        }
     }
 
     /// The pointer moved while holding a game: pick it up the first time, then keep the

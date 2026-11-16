@@ -396,10 +396,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Click an empty spot first, the way you'd click TenFoot to bring it to the front.
         state.select(0)
-        sendMouse(.leftMouseDown, at: CGPoint(x: size.width / 2, y: layout.unit * 0.15), in: window)
-        try? await Task.sleep(for: .seconds(0.05))
-        sendMouse(.leftMouseUp, at: CGPoint(x: size.width / 2, y: layout.unit * 0.15), in: window)
-        try? await Task.sleep(for: .seconds(1.5))
+        for _ in 0..<4 where !NSApp.isActive {
+            sendMouse(.leftMouseDown, at: CGPoint(x: size.width / 2, y: layout.unit * 0.15), in: window)
+            try? await Task.sleep(for: .seconds(0.05))
+            sendMouse(.leftMouseUp, at: CGPoint(x: size.width / 2, y: layout.unit * 0.15), in: window)
+            try? await Task.sleep(for: .seconds(1))
+        }
         print("DRAG CHECK: before: \(titles()); TenFoot active: \(NSApp.isActive), key window: \(window.isKeyWindow)")
 
         // A plain click on the third game should focus it.
