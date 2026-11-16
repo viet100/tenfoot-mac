@@ -97,6 +97,8 @@ final class LauncherState: ObservableObject {
 
     /// Called when the user picks Add App; the app delegate shows the file picker.
     var onAddApp: (() -> Void)?
+    /// The file picker for Add App is open: the Add App row stays pressed until it closes.
+    @Published private(set) var addingApps = false
     /// Called when the user starts a game.
     var onLaunch: ((Game) -> Void)?
     /// Called to go back to the running game.
@@ -241,7 +243,7 @@ final class LauncherState: ObservableObject {
             withAnimation(Theme.selectorAnimation) { settingsIndex = min(SettingsItem.allCases.count - 1, settingsIndex + 1) }
         case .confirm:
             switch SettingsItem.allCases[settingsIndex] {
-            case .addApp: onAddApp?()
+            case .addApp: startAddingApps()
             case .iconStyle: nextIconStyle()
             }
         case .back:
@@ -360,6 +362,18 @@ final class LauncherState: ObservableObject {
             systemIndex = index
         }
         open(SystemButton.allCases[index])
+    }
+
+    /// Presses the Add App row and opens the file picker (it stays pressed while the picker is up).
+    private func startAddingApps() {
+        guard !addingApps else { return }
+        withAnimation(Theme.pressAnimation) { addingApps = true }
+        onAddApp?()
+    }
+
+    /// The file picker closed: the Add App row springs back.
+    func finishAddingApps() {
+        withAnimation(Theme.releaseAnimation) { addingApps = false }
     }
 
     /// Clicking a Settings item selects it.

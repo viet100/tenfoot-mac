@@ -73,6 +73,9 @@ enum Theme {
 
     // Starting a game
     static let pressScale: CGFloat = 0.90          // a tile shrinks to this when pressed, then springs back
+    static let rowPressScale: CGFloat = 0.96       // a Settings row shrinks to this while its picker is open
+    static let rowPressDarken: Double = 0.25       // black over a pressed Settings row
+    static let pickerDelay: Double = 0.15          // seconds the press shows before the file picker opens
     static let launchOthersOpacity: Double = 0.35  // the other tiles fade back while a game starts
     static let launchDarken: Double = 0.30         // black over the starting game's tile, behind the spinner
     static let spinnerPeriod: Double = 0.9         // seconds per turn of the spinner
@@ -87,6 +90,8 @@ enum Theme {
     // Motion. `motionScale` slows everything down (used to record the CI animation GIF).
     static var motionScale: Double = 1
     static var selectorAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
+    static var pressAnimation: Animation { .smooth(duration: 0.12 * motionScale) }
+    static var releaseAnimation: Animation { .bouncy(duration: 0.35 * motionScale) }
     static var carouselAnimation: Animation { .smooth(duration: 0.18 * motionScale) }
     static var popupAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
     static var screenAnimation: Animation { .smooth(duration: 0.35 * motionScale) }

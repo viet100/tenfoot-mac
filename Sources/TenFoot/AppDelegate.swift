@@ -60,8 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state = LauncherState(library: Library(), preferences: Preferences(), saves: false)
         }
         state.onAddApp = { [weak self] in
-            // Let the current input event finish before the picker takes over.
-            DispatchQueue.main.async { self?.presentAddAppPanel() }
+            // Let the row show its press before the picker takes over the screen.
+            DispatchQueue.main.asyncAfter(deadline: .now() + Theme.pickerDelay) { self?.presentAddAppPanel() }
         }
 
         // Starting or resuming waits until A is let go; otherwise the game comes to the
@@ -210,6 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         window?.makeKeyAndOrderFront(nil)
         NSCursor.setHiddenUntilMouseMoves(true)
+        state.finishAddingApps()
     }
 
     // MARK: - Input
@@ -337,8 +338,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.handle(.down)
         await capture("home-settings-button")
 
-        // Settings → Icon Style, switched to Full Colour.
+        // Settings → Add App, held pressed as if the file picker were open (the real
+        // picker would stop the run).
         state.handle(.confirm)
+        let addApp = state.onAddApp
+        state.onAddApp = nil
+        state.handle(.confirm)
+        await capture("settings-add-app-pressed")
+        state.finishAddingApps()
+        state.onAddApp = addApp
+
+        // Settings → Icon Style, switched to Full Colour.
         state.handle(.down)
         state.handle(.confirm)
         await capture("settings-icon-style")

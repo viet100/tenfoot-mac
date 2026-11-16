@@ -461,7 +461,8 @@ private struct SettingsScreen: View {
 
             VStack(spacing: unit * 0.014) {
                 ForEach(Array(LauncherState.SettingsItem.allCases.enumerated()), id: \.element) { index, item in
-                    SettingsRow(item: item, value: value(of: item), focused: index == state.settingsIndex, unit: unit)
+                    SettingsRow(item: item, value: value(of: item), focused: index == state.settingsIndex,
+                                pressed: item == .addApp && state.addingApps, unit: unit)
                         .contentShape(Rectangle())
                         .onTapGesture { state.click(settingsItem: index) }
                 }
@@ -492,6 +493,7 @@ private struct SettingsRow: View {
     let item: LauncherState.SettingsItem
     let value: String?
     let focused: Bool
+    let pressed: Bool // held down while its file picker is open
     let unit: CGFloat
 
     var body: some View {
@@ -518,7 +520,9 @@ private struct SettingsRow: View {
         .padding(.horizontal, unit * 0.03)
         .padding(.vertical, unit * 0.022)
         .glassEffect(focused ? Glass.regular.tint(.white.opacity(Theme.focusedGlassTint)) : .regular, in: shape)
+        .overlay(shape.fill(.black.opacity(pressed ? Theme.rowPressDarken : 0)))
         .overlay(shape.strokeBorder(.white.opacity(focused ? 0.85 : 0), lineWidth: unit * 0.003))
+        .scaleEffect(pressed ? Theme.rowPressScale : 1)
     }
 }
 
