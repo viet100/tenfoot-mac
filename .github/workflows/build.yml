@@ -7,6 +7,11 @@ on:
 permissions:
   contents: write
 
+# One run at a time per branch, in push order, so an older run can't publish over a newer one.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: macos-26
@@ -50,9 +55,16 @@ jobs:
           CERT_PASSWORD: ${{ secrets.TENFOOT_CERT_PASSWORD }}
         run: |
           if [ -z "$CERT_P12" ]; then
+            # An ad-hoc build would make macOS forget TenFoot's Accessibility permission on update.
+            if [ "$GITHUB_REF" = refs/heads/dev ]; then
+              echo "::error::No signing certificate in secrets (TENFOOT_CERT_P12); dev builds must be signed"
+              exit 1
+            fi
             echo "::warning::No signing certificate in secrets; using an ad-hoc signature"
             exit 0
           fi
+          # The certificate's files never outlive this step, whatever happens.
+          trap 'rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/cert.pem"' EXIT
           keychain="$RUNNER_TEMP/signing.keychain-db"
           security create-keychain -p ci "$keychain"
           security set-keychain-settings "$keychain"
@@ -87,31 +99,13 @@ jobs:
       - name: Build app
         run: scripts/build-app.sh
 
-      - name: Render UI snapshots
-        if: ${{ steps.visual.outputs.run == 'true' }}
+      # The signing key is only needed for the build; nothing after it can use it.
+      - name: Remove signing keychain
+        if: always()
         run: |
-          mkdir -p snapshots
-          build/TenFoot.app/Contents/MacOS/TenFoot --render-snapshots "$PWD/snapshots" &
-          pid=$!
-          for _ in $(seq 1 240); do
-            kill -0 "$pid" 2>/dev/null || break
-            sleep 1
-          done
-          if kill -0 "$pid" 2>/dev/null; then
-            echo "::warning::Snapshot run did not exit in time"
-            kill "$pid" || true
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then
+            security delete-keychain "$SIGNING_KEYCHAIN" || true
           fi
-          ls -la snapshots
-
-      - name: Build animation GIF
-        if: ${{ steps.visual.outputs.run == 'true' }}
-        run: |
-          python3 -m venv .venv
-          .venv/bin/pip install --quiet pillow
-          mkdir -p docs/snapshots
-          .venv/bin/python scripts/make-gif.py snapshots/slide docs/snapshots/home-slide.gif
-          .venv/bin/python scripts/make-gif.py snapshots/drag docs/snapshots/home-drag.gif || echo "::warning::No drag GIF"
-          .venv/bin/python scripts/make-gif.py snapshots/prompt docs/snapshots/close-prompt.gif || echo "::warning::No prompt GIF"
 
       - name: Upload app
         uses: actions/upload-artifact@v5
@@ -141,6 +135,32 @@ jobs:
             gh release create latest-dev --prerelease --title "Latest dev build" --notes "$notes"
           fi
           gh release upload latest-dev build/TenFoot.zip --clobber
+
+      - name: Render UI snapshots
+        if: ${{ steps.visual.outputs.run == 'true' }}
+        run: |
+          mkdir -p snapshots
+          build/TenFoot.app/Contents/MacOS/TenFoot --render-snapshots "$PWD/snapshots" &
+          pid=$!
+          for _ in $(seq 1 240); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "::warning::Snapshot run did not exit in time"
+            kill "$pid" || true
+          fi
+          ls -la snapshots
+
+      - name: Build animation GIF
+        if: ${{ steps.visual.outputs.run == 'true' }}
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet pillow==11.3.0
+          mkdir -p docs/snapshots
+          .venv/bin/python scripts/make-gif.py snapshots/slide docs/snapshots/home-slide.gif || echo "::warning::No slide GIF"
+          .venv/bin/python scripts/make-gif.py snapshots/drag docs/snapshots/home-drag.gif || echo "::warning::No drag GIF"
+          .venv/bin/python scripts/make-gif.py snapshots/prompt docs/snapshots/close-prompt.gif || echo "::warning::No prompt GIF"
 
       - name: Upload snapshots
         if: ${{ always() && (steps.visual.outputs.run == 'true') }}

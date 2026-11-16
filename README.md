@@ -20,7 +20,7 @@ Done so far: the home screen, controller navigation, a Settings screen where you
 8. Games open full screen: macOS full screen where the game supports it, otherwise the window is stretched to cover the screen. Windows that already cover the screen are left alone, and if you take a game out of full screen it stays that way. This needs TenFoot to be allowed in **System Settings → Privacy & Security → Accessibility**; macOS asks the first time you start a game. You only have to allow it once, and updates keep the permission.
 9. If your Mac uses the Clear, Tinted or Dark icon style, **Settings → Icon Style → Full Colour** shows each app's own colour icon instead. Apps that don't include a separate icon file keep the macOS version. A custom icon you set yourself with Finder's **Get Info** (paste an image onto the icon) is used as is, for apps and for programs like `.exe` files.
 
-Requires macOS 26 or later.
+Requires macOS 26 or later on an Apple Silicon Mac.
 
 ## Build from source
 ```bash
