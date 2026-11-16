@@ -51,7 +51,7 @@ enum Theme {
     static let repeatInterval: Double = 0.11 // seconds between repeats while held
     static let stickPress: Float = 0.5      // stick deflection that counts as a press
     static let stickRelease: Float = 0.3    // stick must return below this to release
-    static let trackpadStep: CGFloat = 50   // points of trackpad swipe per move
+    static let trackpadStep: CGFloat = 120  // points of trackpad swipe per move
 
     // Backdrop
     static let backdropDim: Double = 0.35        // black overlay on the colour mesh
