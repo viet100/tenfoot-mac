@@ -20,6 +20,9 @@ public struct GameSession: Sendable {
         public var handoffWindow: Double = 10
         /// Wait this long after the last game process quits before returning.
         public var quitGrace: Double = 2
+        /// A game that quits this soon after it started was handing over (a Steam
+        /// shortcut asking Steam to start the game), so wait `handoffWindow` for it.
+        public var handoffQuit: Double = 2
         /// How long to wait for anything to show up after launch.
         public var startGrace: Double = 10
         /// CrossOver games can take a while to start Wine; wait longer for it.
@@ -36,6 +39,7 @@ public struct GameSession: Sendable {
 
     private var sawWine = false
     private var trackedAnything = false
+    private var firstTracked: Double?
     private var lastChange: Double
     /// Whether a hand-off may still take in an app (one per launch or quit).
     private var handoffOpen = true
@@ -55,6 +59,7 @@ public struct GameSession: Sendable {
         guard Self.isRealProcess(pid) else { return }
         processes.insert(pid)
         trackedAnything = true
+        if firstTracked == nil { firstTracked = now }
     }
 
     /// Another app started while the session is running. Returns true if it's
@@ -101,6 +106,10 @@ public struct GameSession: Sendable {
             grace = timing.wineStartGrace
         } else if !trackedAnything {
             grace = timing.startGrace
+        } else if !isClosing, let firstTracked, lastChange - firstTracked <= timing.handoffQuit {
+            // Gone almost as soon as it started: a shortcut handing over to a store
+            // (Steam) that may take a while to start the real game.
+            grace = timing.handoffWindow
         } else {
             grace = timing.quitGrace
         }

@@ -38,7 +38,7 @@ final class ControllerManager: ObservableObject {
             GCController.shouldMonitorBackgroundEvents = watchInBackground
             if watchInBackground {
                 // Keep the poll timer running at full speed while TenFoot is behind the game.
-                activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated,
+                activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
                                                                  reason: "Watching for the Home button")
             } else if let activity {
                 ProcessInfo.processInfo.endActivity(activity)

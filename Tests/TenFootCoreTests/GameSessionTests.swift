@@ -66,6 +66,33 @@ import Testing
         #expect(next)
     }
 
+    @Test func waitsForTheGameAfterAQuickHandOff() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)       // a Steam shortcut
+        session.processQuit(100, at: 1) // quits at once; Steam is still starting
+        #expect(!session.isOver(at: 5))
+        let game = session.appLaunched(200, isWine: false, at: 8)
+        #expect(game)
+        session.processQuit(200, at: 600)
+        #expect(session.isOver(at: 602)) // played, then quit: back as usual
+    }
+
+    @Test func givesUpOnAQuickHandOffThatGoesNowhere() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)
+        session.processQuit(100, at: 1)
+        #expect(!session.isOver(at: 10))
+        #expect(session.isOver(at: 11))
+    }
+
+    @Test func closingDoesntWaitForAHandOff() {
+        var session = GameSession(expectsWine: false, at: 0)
+        session.track(100, at: 0)
+        session.closeRequested()
+        session.processQuit(100, at: 1)
+        #expect(session.isOver(at: 3))
+    }
+
     @Test func takesNothingInOnceClosing() {
         var session = GameSession(expectsWine: true, at: 0)
         session.track(100, at: 0)

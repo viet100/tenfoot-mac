@@ -21,6 +21,11 @@ final class WindowFullscreener {
         var done = false
     }
     private var seen: [Seen] = []
+
+    init() {
+        // A busy game can take seconds to answer; don't let that freeze TenFoot (and Home).
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), Theme.accessibilityTimeout)
+    }
     private var askedForPermission = false
 
     /// A new game: forget the last one's windows.

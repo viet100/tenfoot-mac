@@ -130,20 +130,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opens the game; when it has quit, TenFoot comes back to the front.
     private func launch(_ game: Game) {
+        pendingLaunch = nil
         state.show(message: "Starting \(game.title)…", for: 6)
         state.setLaunching(game.id)
         state.setRunningGame(game.id)
         controllers?.watchInBackground = true
         launcher.launch(game, onFailure: { [weak self] message in
+            self?.pendingLaunch = nil
             self?.gameEnded()
             self?.state.show(message: message, for: 6)
         }, onFinished: { [weak self] in
             guard let self else { return }
             self.gameEnded()
-            self.returnToLauncher()
-            if let next = self.pendingLaunch {
-                self.pendingLaunch = nil
+            // The game chosen when this one was closed, unless it was removed meanwhile.
+            let next = self.pendingLaunch.flatMap { next in self.state.games.first { $0.id == next.id } }
+            self.pendingLaunch = nil
+            if let next {
+                // Straight on to it; bringing TenFoot forward now would cover it.
                 self.launch(next)
+            } else {
+                self.returnToLauncher()
             }
         })
     }

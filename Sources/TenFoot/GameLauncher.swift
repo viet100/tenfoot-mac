@@ -27,6 +27,11 @@ final class GameLauncher {
     private var knownApps: Set<Int32> = []
     private var appsObservation: NSKeyValueObservation?
     private var timer: Timer?
+    /// A game run directly (not an app): kept so its exit is always seen.
+    private var process: Process?
+    /// Launch Services hasn't answered yet (a Gatekeeper check can take a while);
+    /// the session isn't over until it has.
+    private var awaitingOpen = false
 
     private var now: Double { ProcessInfo.processInfo.systemUptime }
 
@@ -58,9 +63,11 @@ final class GameLauncher {
         if Self.isAppBundle(game.url) {
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = true
+            awaitingOpen = true
             NSWorkspace.shared.openApplication(at: game.url, configuration: configuration) { app, error in
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.sessionNumber == number, self.session != nil else { return }
+                    self.awaitingOpen = false
                     if let app {
                         self.track(app.processIdentifier)
                     } else {
@@ -72,6 +79,7 @@ final class GameLauncher {
         } else {
             do {
                 let process = try Self.run(executable: game.url)
+                self.process = process
                 track(process.processIdentifier)
             } catch {
                 stopTracking()
@@ -123,12 +131,12 @@ final class GameLauncher {
     /// Notices processes that have exited, and finishes when the session is over.
     private func check() {
         guard var session else { return }
-        for pid in session.processes where !Self.isAlive(pid) {
+        for pid in session.processes where !isAlive(pid) {
             session.processQuit(pid, at: now)
         }
         self.session = session
         fullscreener.check(processes: session.processes, now: now)
-        if session.isOver(at: now) {
+        if session.isOver(at: now), !awaitingOpen {
             let finished = onFinished
             stopTracking()
             finished?()
@@ -141,6 +149,8 @@ final class GameLauncher {
         appsObservation = nil
         session = nil
         closing = []
+        process = nil
+        awaitingOpen = false
         current = nil
         onFinished = nil
     }
@@ -158,7 +168,7 @@ final class GameLauncher {
         DispatchQueue.main.asyncAfter(deadline: .now() + Theme.closeTimeout) { [weak self] in
             // Only this session's game, and only what Close asked to quit.
             guard let self, self.sessionNumber == number, let session = self.session else { return }
-            for pid in self.closing.intersection(session.processes) where Self.isAlive(pid) {
+            for pid in self.closing.intersection(session.processes) where self.isAlive(pid) {
                 if let app = NSRunningApplication(processIdentifier: pid) {
                     app.forceTerminate()
                 } else {
@@ -218,8 +228,9 @@ final class GameLauncher {
         return process
     }
 
-    private static func isAlive(_ pid: Int32) -> Bool {
+    private func isAlive(_ pid: Int32) -> Bool {
         guard GameSession.isRealProcess(pid) else { return false }
+        if let process, process.processIdentifier == pid { return process.isRunning }
         return kill(pid, 0) == 0 || errno == EPERM
     }
 
