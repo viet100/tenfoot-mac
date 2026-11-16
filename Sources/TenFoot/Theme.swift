@@ -89,6 +89,8 @@ enum Theme {
 
     // Games
     static let closeTimeout: Double = 10    // seconds a game gets to quit before it's stopped outright
+    static let fullscreenDelay: Double = 0.5 // seconds a new game window gets to finish opening before it's made full screen
+    static let fullscreenAttempts = 4       // times to ask for macOS full screen before resizing the window instead
 
     // Backdrop
     static let backdropDim: Double = 0.30        // black overlay on the colour mesh

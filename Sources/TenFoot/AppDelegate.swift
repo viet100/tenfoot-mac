@@ -66,6 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         state.onPower = { [weak self] item in self?.power(item) }
+        launcher.fullscreener.onNeedsPermission = { [weak self] in
+            self?.state.show(message: "To open games full screen, allow TenFoot in System Settings → Privacy & Security → Accessibility", for: 10)
+        }
 
         // Starting or resuming waits until A is let go; otherwise the game comes to the
         // front with A still held and takes it as a press of its own.

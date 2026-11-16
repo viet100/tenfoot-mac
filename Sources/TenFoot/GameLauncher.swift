@@ -12,6 +12,9 @@ final class GameLauncher {
     /// The game being played, if any.
     private(set) var current: Game?
 
+    /// Makes the game's windows full screen as they open.
+    let fullscreener = WindowFullscreener()
+
     /// Processes currently counted as the game (for diagnostics).
     var trackedProcesses: Set<Int32> { session?.processes ?? [] }
 
@@ -33,6 +36,7 @@ final class GameLauncher {
             return
         }
         stopTracking()
+        fullscreener.reset()
 
         current = game
         self.onFinished = onFinished
@@ -93,6 +97,7 @@ final class GameLauncher {
             session.processQuit(pid, at: now)
         }
         self.session = session
+        fullscreener.check(processes: session.processes, now: now)
         if session.isOver(at: now) {
             let finished = onFinished
             stopTracking()
