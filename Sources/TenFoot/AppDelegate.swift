@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: LauncherWindow?
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
+    private var rightClickMonitor: Any?
     private var scrollAmount: CGFloat = 0
     private var mouseViaSystem = false // CI drag check: post system-wide mouse events
 
@@ -91,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         installKeyboardInput()
         installScrollInput()
+        installRightClick()
 
         // Back in front: pick up any icon changed in Finder (Get Info) meanwhile.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
@@ -228,9 +230,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case 36, 76: action = .confirm // Return, keypad Enter
                 case 53: action = .back        // Esc
                 case 7: action = .close        // X
+                case 16: action = .options     // Y
                 default: return event
                 }
                 self.state.handle(action)
+                return nil
+            }
+        }
+    }
+
+    /// Right-clicking a game's tile opens its options menu.
+    private func installRightClick() {
+        rightClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) { [weak self] event in
+            guard let self else { return event }
+            return MainActor.assumeIsolated {
+                guard event.window === self.window, let view = self.window?.contentView else { return event }
+                let layout = Layout(size: view.bounds.size)
+                // Window coordinates count up from the bottom; SwiftUI's count down from the top.
+                let x = event.locationInWindow.x
+                let y = view.bounds.height - event.locationInWindow.y
+                let rowY = layout.unit * Theme.rowCenterY
+                guard abs(y - rowY) <= layout.tile / 2,
+                      let index = layout.game(atX: x, scrollIndex: self.state.scrollIndex,
+                                              count: self.state.games.count)
+                else { return event }
+                self.state.openOptions(game: index)
                 return nil
             }
         }
@@ -324,6 +348,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await recordSlide(of: window, to: directory.appendingPathComponent("slide", isDirectory: true))
         await checkDragToReorder(window: window, directory: directory)
         await checkLaunchAndReturn(window: window, directory: directory)
+        await checkRemove(window: window, directory: directory)
         NSApp.terminate(nil)
     }
 
@@ -622,6 +647,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         print("CLOSE CHECK: " + (closed && NSApp.isActive ? "PASSED, Calculator closed and TenFoot is in front"
                                                           : "FAILED, closed: \(closed), TenFoot active: \(NSApp.isActive)"))
+    }
+
+    /// Opens the options menu on the focused game (a still of it), then removes that game.
+    /// Logged as "REMOVE CHECK: …".
+    private func checkRemove(window: NSWindow, directory: URL) async {
+        guard state.screen == .home, !state.games.isEmpty else {
+            print("REMOVE CHECK: FAILED, no games on the home screen")
+            return
+        }
+        if state.area != .games { state.handle(.up) }
+        try? await Task.sleep(for: .seconds(0.5))
+        let before = state.games.map(\.title)
+        let target = state.games[state.focusIndex].title
+        state.handle(.options)
+        try? await Task.sleep(for: .seconds(1.2))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("options-menu.png"))
+        state.handle(.confirm)
+        try? await Task.sleep(for: .seconds(1.2))
+        Self.captureWindow(window.windowNumber, to: directory.appendingPathComponent("options-removed.png"))
+        let after = state.games.map(\.title)
+        let removed = after.count == before.count - 1 && !after.contains(target) && state.optionsMenu == nil
+        print("REMOVE CHECK: " + (removed ? "PASSED, removed \(target) (\(before.count) → \(after.count) games)"
+                                          : "FAILED, before: \(before), after: \(after)"))
     }
 
     /// Apps every Mac has, standing in for the user's games in CI snapshots.

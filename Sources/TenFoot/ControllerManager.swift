@@ -4,7 +4,7 @@ import TenFootCore
 
 /// Reads every connected game controller and turns it into `InputAction`s:
 /// the d-pad or left stick moves (with hold-to-repeat), A confirms, B goes back,
-/// X closes, and Home (or − and + together) goes back to TenFoot from a game.
+/// X closes, Y opens a game's options, and Home (or − and + together) goes back to TenFoot from a game.
 ///
 /// Works the same for DualShock/DualSense, Xbox, Switch Pro, a Joy-Con pair and a
 /// single sideways Joy-Con: all of them are read through GameController's generic
@@ -20,6 +20,7 @@ final class ControllerManager: ObservableObject {
     static let keyboardConfirmSymbol = "return"
     static let keyboardBackSymbol = "escape"
     static let keyboardCloseSymbol = "x.square"
+    static let keyboardOptionsSymbol = "y.square"
 
     /// Glyphs for the hint bar: the connected controller's own d-pad and buttons,
     /// or keyboard keys when no controller is connected.
@@ -27,6 +28,7 @@ final class ControllerManager: ObservableObject {
     @Published private(set) var confirmSymbol = ControllerManager.keyboardConfirmSymbol
     @Published private(set) var backSymbol = ControllerManager.keyboardBackSymbol
     @Published private(set) var closeSymbol = ControllerManager.keyboardCloseSymbol
+    @Published private(set) var optionsSymbol = ControllerManager.keyboardOptionsSymbol
 
     /// While a game runs, keep reading controllers in the background so Home works.
     var watchInBackground = false {
@@ -89,6 +91,7 @@ final class ControllerManager: ObservableObject {
         confirmSymbol = profile?.buttons[GCInputButtonA]?.sfSymbolsName ?? Self.keyboardConfirmSymbol
         backSymbol = profile?.buttons[GCInputButtonB]?.sfSymbolsName ?? Self.keyboardBackSymbol
         closeSymbol = profile?.buttons[GCInputButtonX]?.sfSymbolsName ?? Self.keyboardCloseSymbol
+        optionsSymbol = profile?.buttons[GCInputButtonY]?.sfSymbolsName ?? Self.keyboardOptionsSymbol
     }
 
     /// Runs `action` once no button is held on any controller, so the button that
@@ -161,7 +164,8 @@ final class ControllerManager: ObservableObject {
         var down: Set<String> = []
         var actions: [InputAction] = []
         let mapping: [(String, InputAction)] = [
-            (GCInputButtonA, .confirm), (GCInputButtonB, .back), (GCInputButtonX, .close), (GCInputButtonHome, .home),
+            (GCInputButtonA, .confirm), (GCInputButtonB, .back), (GCInputButtonX, .close), (GCInputButtonY, .options),
+            (GCInputButtonHome, .home),
         ]
         for (name, action) in mapping {
             guard buttons[name]?.isPressed == true else { continue }

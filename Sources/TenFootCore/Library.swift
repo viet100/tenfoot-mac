@@ -33,6 +33,15 @@ public struct Library: Codable, Equatable, Sendable {
         return entry
     }
 
+    /// Removes an app from the library (the app itself is left alone).
+    /// Returns false if it wasn't in the library.
+    @discardableResult
+    public mutating func remove(id: UUID) -> Bool {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return false }
+        entries.remove(at: index)
+        return true
+    }
+
     /// Moves the entry at `from` so it ends up at index `to`; the others shift along.
     public mutating func move(from: Int, to: Int) {
         guard entries.indices.contains(from), entries.indices.contains(to), from != to else { return }

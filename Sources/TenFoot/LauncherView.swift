@@ -55,6 +55,18 @@ struct LauncherView: View {
                         .zIndex(11)
                 }
 
+                // A game's options menu, shown the same way as the close prompt.
+                if let menu = state.optionsMenu {
+                    Color.black.opacity(Theme.popupDim)
+                        .ignoresSafeArea()
+                        .onTapGesture { state.pick(.cancel) }
+                        .transition(.opacity)
+                        .zIndex(10)
+                    OptionsMenuView(state: state, menu: menu, unit: layout.unit)
+                        .transition(.scale(scale: Theme.popupScale).combined(with: .opacity))
+                        .zIndex(11)
+                }
+
                 // The message ("Starting…", or an error) sits on its own line above the hints.
                 VStack(alignment: .trailing, spacing: layout.unit * Theme.messageGap) {
                     if let message = state.message {
@@ -123,11 +135,7 @@ private struct HomeScreen: View {
 
     /// The game whose tile is under `point` (home-screen coordinates), if any.
     private func game(at point: CGPoint) -> Int? {
-        let x = point.x - layout.rowOrigin(scrollIndex: state.scrollIndex)
-        let slot = Int((x / layout.step).rounded(.down))
-        let intoCell = x - CGFloat(slot) * layout.step
-        guard state.games.indices.contains(slot), intoCell >= layout.rim, intoCell <= layout.rim + layout.tile else { return nil }
-        return slot
+        layout.game(atX: point.x, scrollIndex: state.scrollIndex, count: state.games.count)
     }
 
     private func pointerMoved(_ value: DragGesture.Value) {
@@ -206,6 +214,15 @@ extension Layout {
     func tileCenter(slot: Int, scrollIndex: Int) -> CGPoint {
         CGPoint(x: rowOrigin(scrollIndex: scrollIndex) + CGFloat(slot) * step + cell / 2,
                 y: unit * Theme.rowCenterY)
+    }
+
+    /// The game whose tile covers `x` across the screen, if any (not the gaps between tiles).
+    func game(atX x: CGFloat, scrollIndex: Int, count: Int) -> Int? {
+        let intoRow = x - rowOrigin(scrollIndex: scrollIndex)
+        let slot = Int((intoRow / step).rounded(.down))
+        let intoCell = intoRow - CGFloat(slot) * step
+        guard (0..<count).contains(slot), intoCell >= rim, intoCell <= rim + tile else { return nil }
+        return slot
     }
 
     /// The slot nearest to a point `x` across the screen.
@@ -584,6 +601,57 @@ private struct ClosePromptView: View {
     }
 }
 
+/// A game's options: its name, then a list of actions (Remove from TenFoot, Cancel).
+/// Up/down moves, A picks, B closes.
+private struct OptionsMenuView: View {
+    @ObservedObject var state: LauncherState
+    let menu: LauncherState.OptionsMenu
+    let unit: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: unit * 0.04, style: .continuous)
+        VStack(alignment: .leading, spacing: unit * 0.03) {
+            Text(menu.game.title)
+                .font(.system(size: unit * Theme.screenTitleSize * 0.8, weight: .bold))
+                .lineLimit(1)
+            VStack(spacing: unit * 0.014) {
+                ForEach(Array(LauncherState.OptionsItem.allCases.enumerated()), id: \.element) { index, item in
+                    row(item, focused: state.optionsIndex == index, available: state.isAvailable(item))
+                }
+            }
+        }
+        .foregroundStyle(.white)
+        .shadow(color: .black.opacity(Theme.popupTextShadow), radius: unit * 0.006)
+        .padding(unit * 0.05)
+        .frame(width: unit * 0.9)
+        .glassEffect(Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
+    }
+
+    private func row(_ item: LauncherState.OptionsItem, focused: Bool, available: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: unit * 0.025, style: .continuous)
+        return HStack(spacing: unit * 0.02) {
+            Image(systemName: item.symbol)
+                .font(.system(size: unit * 0.03, weight: .medium))
+                .frame(width: unit * 0.045)
+            Text(item.title)
+                .font(.system(size: unit * Theme.settingsRowSize, weight: .semibold))
+            Spacer(minLength: unit * 0.02)
+            if !available {
+                Text("Close it first")
+                    .font(.system(size: unit * Theme.settingsDetailSize))
+            }
+        }
+        .opacity(available ? 1 : 0.5)
+        .padding(.horizontal, unit * 0.025)
+        .padding(.vertical, unit * 0.018)
+        .glassEffect(focused ? Glass.clear.tint(.white.opacity(Theme.focusedGlassTint))
+                             : Glass.clear.tint(.black.opacity(Theme.popupTint)), in: shape)
+        .overlay(shape.strokeBorder(.white.opacity(focused ? 0.85 : 0), lineWidth: unit * 0.003))
+        .contentShape(shape)
+        .onTapGesture { state.pick(item) }
+    }
+}
+
 /// "Starting…" or an error, on its own line above the hint bar.
 private struct MessageBanner: View {
     let text: String
@@ -631,6 +699,7 @@ private struct HintBar: View {
         case .confirm: controllers.confirmSymbol
         case .back: controllers.backSymbol
         case .close: controllers.closeSymbol
+        case .options: controllers.optionsSymbol
         }
     }
 

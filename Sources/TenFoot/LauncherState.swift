@@ -42,7 +42,30 @@ final class LauncherState: ObservableObject {
         }
     }
 
-    enum HintKind { case move, confirm, back, close }
+    enum HintKind { case move, confirm, back, close, options }
+
+    /// A game's options menu (Y, or right-click on its tile).
+    struct OptionsMenu {
+        let game: Game
+    }
+
+    enum OptionsItem: CaseIterable, Identifiable {
+        case remove
+        case cancel
+        var id: Self { self }
+        var title: String {
+            switch self {
+            case .remove: "Remove from TenFoot"
+            case .cancel: "Cancel"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .remove: "minus.circle"
+            case .cancel: "xmark"
+            }
+        }
+    }
 
     /// "Close <game>?" — shown before closing a running game. `next` is the game to
     /// start once it has closed, when the user picked a different game.
@@ -88,6 +111,8 @@ final class LauncherState: ObservableObject {
     @Published private(set) var closePrompt: ClosePrompt?
     @Published private(set) var promptFocus: PromptButton = .close
     @Published private(set) var drag: Drag?
+    @Published private(set) var optionsMenu: OptionsMenu?
+    @Published private(set) var optionsIndex = 0
 
     /// The game that is starting: its tile shows a spinner until the game is in front.
     @Published private(set) var launchingGameID: UUID?
@@ -146,10 +171,13 @@ final class LauncherState: ObservableObject {
         if closePrompt != nil {
             return [(.move, "Move"), (.confirm, "Select"), (.back, "Cancel")]
         }
+        if optionsMenu != nil {
+            return [(.move, "Move"), (.confirm, "Select"), (.back, "Back")]
+        }
         switch (screen, area) {
         case (.home, .games) where focusedGame != nil && focusedGame?.id == runningGameID:
-            return [(.move, "Move"), (.confirm, "Resume"), (.close, "Close")]
-        case (.home, .games): return [(.move, "Move"), (.confirm, "Start")]
+            return [(.move, "Move"), (.confirm, "Resume"), (.close, "Close"), (.options, "Options")]
+        case (.home, .games): return [(.move, "Move"), (.confirm, "Start"), (.options, "Options")]
         case (.home, .system): return [(.move, "Move"), (.confirm, "Open")]
         case (.settings, _): return [(.move, "Move"), (.confirm, "Select"), (.back, "Back")]
         }
@@ -161,6 +189,10 @@ final class LauncherState: ObservableObject {
         guard drag == nil else { return } // the mouse is moving a game
         if closePrompt != nil {
             handlePrompt(action)
+            return
+        }
+        if optionsMenu != nil {
+            handleOptions(action)
             return
         }
         if action == .home {
@@ -184,6 +216,8 @@ final class LauncherState: ObservableObject {
             if let game = focusedGame, game.id == runningGameID {
                 askToClose(game, then: nil)
             }
+        case (.games, .options):
+            openOptions(game: focusIndex)
         case (.games, .down):
             withAnimation(Theme.selectorAnimation) { area = .system }
         case (.system, .up) where !games.isEmpty:
@@ -212,7 +246,7 @@ final class LauncherState: ObservableObject {
             }
         case .back:
             withAnimation(Theme.screenAnimation) { screen = .home }
-        case .left, .right, .close, .home:
+        case .left, .right, .close, .home, .options:
             break
         }
     }
@@ -227,7 +261,7 @@ final class LauncherState: ObservableObject {
             choose(promptFocus)
         case .back, .home:
             choose(.cancel)
-        case .up, .down, .close:
+        case .up, .down, .close, .options:
             break
         }
     }
@@ -281,6 +315,7 @@ final class LauncherState: ObservableObject {
     func showRunningGame() {
         setLaunching(nil)
         closePrompt = nil
+        optionsMenu = nil
         messageClear?.cancel()
         message = nil
         screen = .home
@@ -303,7 +338,7 @@ final class LauncherState: ObservableObject {
     func click(game index: Int) {
         trace?("click on game \(index)")
         guard screen == .home, games.indices.contains(index) else { return }
-        guard closePrompt == nil, drag == nil else { return }
+        guard closePrompt == nil, optionsMenu == nil, drag == nil else { return }
         if area == .games && index == focusIndex {
             start(games[index])
             return
@@ -318,7 +353,8 @@ final class LauncherState: ObservableObject {
 
     /// Clicking a round button opens it.
     func click(systemButton index: Int) {
-        guard closePrompt == nil, screen == .home, SystemButton.allCases.indices.contains(index) else { return }
+        guard closePrompt == nil, optionsMenu == nil, screen == .home,
+              SystemButton.allCases.indices.contains(index) else { return }
         withAnimation(Theme.selectorAnimation) {
             area = .system
             systemIndex = index
@@ -339,6 +375,7 @@ final class LauncherState: ObservableObject {
         case .confirm: handle(.confirm)
         case .back: handle(.back)
         case .close: handle(.close)
+        case .options: handle(.options)
         case .move: break
         }
     }
@@ -346,7 +383,7 @@ final class LauncherState: ObservableObject {
     /// Scroll wheel or trackpad swipe: along the game row on the home screen,
     /// up and down the list in Settings. Positive is right/down.
     func scroll(by steps: Int) {
-        guard steps != 0, closePrompt == nil, drag == nil else { return }
+        guard steps != 0, closePrompt == nil, optionsMenu == nil, drag == nil else { return }
         switch screen {
         case .home:
             guard !games.isEmpty else { return }
@@ -392,11 +429,86 @@ final class LauncherState: ObservableObject {
         withAnimation(Theme.selectorAnimation) { focusIndex = next.index }
     }
 
+    // MARK: - Game options
+
+    /// Opens a game's options menu (Y on the focused game, or right-click on a tile).
+    func openOptions(game index: Int) {
+        guard screen == .home, closePrompt == nil, optionsMenu == nil, drag == nil,
+              games.indices.contains(index) else { return }
+        if area != .games || index != focusIndex {
+            withAnimation(Theme.selectorAnimation) { area = .games }
+            var next = row
+            next.select(index)
+            apply(next)
+        }
+        let game = games[index]
+        // A running game can't be removed, so start on Cancel.
+        optionsIndex = game.id == runningGameID ? OptionsItem.allCases.firstIndex(of: .cancel)! : 0
+        withAnimation(Theme.popupAnimation) { optionsMenu = OptionsMenu(game: game) }
+    }
+
+    /// Whether an item can be picked right now (Remove is off for the running game).
+    func isAvailable(_ item: OptionsItem) -> Bool {
+        item != .remove || optionsMenu?.game.id != runningGameID
+    }
+
+    /// Picks an item of the options menu (A on the focused one, or a click).
+    func pick(_ item: OptionsItem) {
+        guard let menu = optionsMenu, isAvailable(item) else { return }
+        withAnimation(Theme.popupAnimation) { optionsMenu = nil }
+        switch item {
+        case .remove: remove(gameID: menu.game.id)
+        case .cancel: break
+        }
+    }
+
+    private func handleOptions(_ action: InputAction) {
+        let last = OptionsItem.allCases.count - 1
+        switch action {
+        case .up:
+            withAnimation(Theme.selectorAnimation) { optionsIndex = max(0, optionsIndex - 1) }
+        case .down:
+            withAnimation(Theme.selectorAnimation) { optionsIndex = min(last, optionsIndex + 1) }
+        case .confirm:
+            pick(OptionsItem.allCases[optionsIndex])
+        case .back, .home, .options:
+            pick(.cancel)
+        case .left, .right, .close:
+            break
+        }
+    }
+
+    /// Takes a game off the home screen and saves the library; the app itself stays on
+    /// the Mac. Focus stays in the same place, so the next game slides into it.
+    private func remove(gameID id: UUID) {
+        guard id != runningGameID, let index = games.firstIndex(where: { $0.id == id }) else { return }
+        library.remove(id: id)
+        if saves {
+            do {
+                try library.save(to: StorageLocation.library)
+            } catch {
+                print("Couldn't save library: \(error)")
+            }
+        }
+        var remaining = games
+        remaining.remove(at: index)
+        var next = RowFocus(count: remaining.count, visibleCount: row.visibleCount)
+        next.select(min(focusIndex, remaining.count - 1))
+        next.scroll(to: scrollIndex)
+        withAnimation(Theme.reorderAnimation) {
+            games = remaining
+            row = next
+            scrollIndex = next.firstVisible
+            focusIndex = next.index
+            if remaining.isEmpty { area = .system }
+        }
+    }
+
     // MARK: - Drag to reorder
 
     /// Picks up the game at `index`. Returns false if it can't be moved right now.
     func beginDrag(_ index: Int) -> Bool {
-        guard drag == nil, screen == .home, closePrompt == nil, games.indices.contains(index) else {
+        guard drag == nil, screen == .home, closePrompt == nil, optionsMenu == nil, games.indices.contains(index) else {
             trace?("couldn't pick up game \(index): dragging \(drag != nil), prompt \(closePrompt != nil)")
             return false
         }

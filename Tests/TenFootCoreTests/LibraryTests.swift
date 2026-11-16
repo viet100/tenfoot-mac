@@ -18,6 +18,16 @@ import Testing
         #expect(again.id == first.id)
     }
 
+    @Test func removesAnEntry() {
+        var library = Library()
+        for name in ["A", "B", "C"] { library.add(path: "/Applications/\(name).app", title: name) }
+        let b = library.entries[1]
+        #expect(library.remove(id: b.id))
+        #expect(library.entries.map(\.title) == ["A", "C"])
+        #expect(library.remove(id: b.id) == false) // already gone
+        #expect(library.entries.map(\.title) == ["A", "C"])
+    }
+
     @Test func movesEntriesBothWays() {
         var library = Library()
         for name in ["A", "B", "C", "D"] { library.add(path: "/Applications/\(name).app", title: name) }
