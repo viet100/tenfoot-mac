@@ -525,12 +525,18 @@ final class LauncherState: ObservableObject {
 
     // MARK: - Preferences
 
+    /// Reads every game's icon again, e.g. after one was changed in Finder.
+    func reloadIcons() {
+        guard drag == nil else { return }
+        games = library.entries.map { Game(entry: $0, iconStyle: preferences.iconStyle) }
+    }
+
     /// Switches to the next icon style, reloads every icon and saves the choice.
     private func nextIconStyle() {
         let styles = IconStyle.allCases
         let index = styles.firstIndex(of: preferences.iconStyle) ?? 0
         preferences.iconStyle = styles[(index + 1) % styles.count]
-        games = library.entries.map { Game(entry: $0, iconStyle: preferences.iconStyle) }
+        reloadIcons()
         if saves {
             do {
                 try preferences.save(to: StorageLocation.preferences)

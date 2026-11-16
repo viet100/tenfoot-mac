@@ -92,6 +92,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installKeyboardInput()
         installScrollInput()
 
+        // Back in front: pick up any icon changed in Finder (Get Info) meanwhile.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.state.reloadIcons() }
+        }
+
         // Once the game is in front (TenFoot steps back), its tile stops showing the spinner.
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
                                                queue: .main) { [weak self] _ in

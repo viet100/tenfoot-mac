@@ -20,9 +20,22 @@ struct Game: Identifiable {
         case .matchMacOS:
             icon = NSWorkspace.shared.icon(forFile: entry.path)
         case .fullColour:
-            icon = Self.bundleIcon(at: url) ?? NSWorkspace.shared.icon(forFile: entry.path)
+            icon = Self.customIcon(at: url) ?? Self.bundleIcon(at: url) ?? NSWorkspace.shared.icon(forFile: entry.path)
         }
         (primary, secondary) = Self.colors(of: icon)
+    }
+
+    /// A custom icon set in Finder with Get Info, exactly as it was pasted in. Finder keeps
+    /// it in a resource fork: the file's own for a plain file (such as an .exe), or the
+    /// hidden "Icon\r" file's inside an app or folder.
+    private static func customIcon(at url: URL) -> NSImage? {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return nil }
+        let holder = isDirectory.boolValue ? url.appendingPathComponent("Icon\r") : url
+        let fork = URL(fileURLWithPath: holder.path + "/..namedfork/rsrc")
+        guard let data = try? Data(contentsOf: fork), !data.isEmpty,
+              let icns = IcnsExtractor.icns(inResourceFork: data) else { return nil }
+        return NSImage(data: icns)
     }
 
     /// The app's own icon file from inside its bundle (Contents/Resources/<name>.icns).
