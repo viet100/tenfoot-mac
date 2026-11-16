@@ -322,7 +322,8 @@ private struct TileRow: View {
                     } keyframes: { _ in
                         KeyframeTrack(\.self) {
                             CubicKeyframe(Theme.pressScale, duration: Theme.pressDownDuration)
-                            SpringKeyframe(1, duration: Theme.pressReleaseDuration, spring: .bouncy)
+                            SpringKeyframe(1, duration: Theme.pressReleaseDuration,
+                                           spring: .bouncy(duration: Theme.pressReleaseDuration))
                         }
                     }
                     // While a game starts, the others step back.
@@ -335,13 +336,12 @@ private struct TileRow: View {
             }
 
             // The title travels with the selector.
-            Text(state.focusedGame?.title ?? "")
+            BlurText(state.focusedGame?.title ?? "")
                 .font(.system(size: unit * Theme.titleSize, weight: .semibold))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.4), radius: unit * 0.008)
                 .lineLimit(1)
                 .fixedSize()
-                .contentTransition(.identity) // swap the name instantly; a cross-fade leaves the old name behind
                 .offset(x: focusX + rim, y: rim - unit * Theme.titleGap)
                 .allowsHitTesting(false)
         }
@@ -426,7 +426,7 @@ private struct EmptyLibrary: View {
     var body: some View {
         VStack(spacing: unit * 0.018) {
             Image(systemName: "square.grid.2x2")
-                .font(.system(size: unit * 0.06, weight: .light))
+                .font(.system(size: unit * 0.06, weight: .semibold))
             Text("No apps yet")
                 .font(.system(size: unit * 0.04, weight: .semibold))
             Text("Open Settings below and choose Add App to put your games here.")
@@ -522,7 +522,7 @@ private struct SettingsRow: View {
         let shape = RoundedRectangle(cornerRadius: unit * 0.03, style: .continuous)
         HStack(spacing: unit * 0.024) {
             Image(systemName: item.symbol)
-                .font(.system(size: unit * 0.034, weight: .medium))
+                .font(.system(size: unit * 0.034, weight: .semibold)) // same weight as the row's title
                 .frame(width: unit * 0.05)
             VStack(alignment: .leading, spacing: unit * 0.004) {
                 Text(item.title)
@@ -533,7 +533,7 @@ private struct SettingsRow: View {
             }
             Spacer(minLength: unit * 0.02)
             if let value {
-                Text(value)
+                BlurText(value)
                     .font(.system(size: unit * Theme.settingsRowSize, weight: .medium))
                     .opacity(0.85)
             }
@@ -549,6 +549,22 @@ private struct SettingsRow: View {
 }
 
 // MARK: - Shared
+
+/// Text that eases from one string to the next: the old text blurs and fades out while
+/// the new text blurs in, in the same place.
+struct BlurText: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        ZStack {
+            Text(text)
+                .id(text)
+                .transition(.blurReplace)
+        }
+        .animation(Theme.textAnimation, value: text)
+    }
+}
 
 /// A drifting colour field taken from the focused game, for the glass to refract.
 private struct Backdrop: View {
@@ -708,7 +724,7 @@ private struct MenuPanel: View {
         let shape = RoundedRectangle(cornerRadius: unit * 0.025, style: .continuous)
         return HStack(spacing: unit * 0.02) {
             Image(systemName: row.symbol)
-                .font(.system(size: unit * 0.03, weight: .medium))
+                .font(.system(size: unit * 0.03, weight: .semibold)) // same weight as the row's title
                 .frame(width: unit * 0.045)
             Text(row.title)
                 .font(.system(size: unit * Theme.settingsRowSize, weight: .semibold))
@@ -735,7 +751,7 @@ private struct MessageBanner: View {
     let unit: CGFloat
 
     var body: some View {
-        Text(text)
+        BlurText(text)
             .font(.system(size: unit * Theme.hintSize, weight: .medium))
             .foregroundStyle(.white)
             .lineLimit(2)
@@ -783,7 +799,7 @@ private struct HintBar: View {
     private func item(symbol: String, label: String) -> some View {
         HStack(spacing: unit * 0.01) {
             Image(systemName: symbol)
-            Text(label)
+            BlurText(label)
         }
     }
 }

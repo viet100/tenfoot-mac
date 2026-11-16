@@ -88,19 +88,28 @@ enum Theme {
     // Backdrop
     static let backdropDim: Double = 0.35        // black overlay on the colour mesh
 
-    // Motion. `motionScale` slows everything down (used to record the CI animation GIF).
+    // Motion. Everything moves on the same smooth curve at one of three speeds, and
+    // presses spring back with the same bounce. `motionScale` slows everything down
+    // (used to record the CI animation GIF).
     static var motionScale: Double = 1
-    static var selectorAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
-    static var pressAnimation: Animation { .smooth(duration: 0.12 * motionScale) }
-    static var releaseAnimation: Animation { .bouncy(duration: 0.35 * motionScale) }
-    static var carouselAnimation: Animation { .smooth(duration: 0.18 * motionScale) }
-    static var popupAnimation: Animation { .smooth(duration: 0.30 * motionScale) }
-    static var screenAnimation: Animation { .smooth(duration: 0.35 * motionScale) }
-    static var backdropAnimation: Animation { .easeInOut(duration: 0.60 * motionScale) }
-    static var reorderAnimation: Animation { .smooth(duration: 0.28 * motionScale) }   // tiles making room
-    static var liftAnimation: Animation { .smooth(duration: 0.18 * motionScale) }      // picking a game up
-    static var dropAnimation: Animation { .smooth(duration: 0.25 * motionScale) }      // settling into its slot
+    static var quick: Double { 0.18 * motionScale }     // small, direct moves: scrolling, picking up
+    static var standard: Double { 0.30 * motionScale }  // focus, pop-ups, screens, text, tiles settling
+    static var slow: Double { 0.60 * motionScale }      // the backdrop's colours
+
+    static var selectorAnimation: Animation { .smooth(duration: standard) }
+    static var carouselAnimation: Animation { .smooth(duration: quick) }
+    static var popupAnimation: Animation { .smooth(duration: standard) }
+    static var screenAnimation: Animation { .smooth(duration: standard) }
+    static var textAnimation: Animation { .smooth(duration: standard) }   // old text blurs out, new text blurs in
+    static var backdropAnimation: Animation { .smooth(duration: slow) }
+    static var reorderAnimation: Animation { .smooth(duration: standard) } // tiles making room
+    static var liftAnimation: Animation { .smooth(duration: quick) }       // picking a game up
+    static var dropAnimation: Animation { .smooth(duration: standard) }    // settling into its slot
+    static var dragScrollAnimation: Animation { .linear(duration: dragScrollInterval * motionScale) }
+
+    // Pressing something: it dips quickly, then springs back.
     static var pressDownDuration: Double { 0.08 * motionScale }
     static var pressReleaseDuration: Double { 0.45 * motionScale }
-    static var dragScrollAnimation: Animation { .linear(duration: dragScrollInterval * motionScale) }
+    static var pressAnimation: Animation { .smooth(duration: pressDownDuration) }
+    static var releaseAnimation: Animation { .bouncy(duration: pressReleaseDuration) }
 }
